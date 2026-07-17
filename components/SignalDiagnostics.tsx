@@ -30,6 +30,15 @@ interface Diagnostics {
     price_down_flat?: boolean;
     vol_20d_vs_60d?: number;
   };
+  vol_accum_breakout?: {
+    signal?: boolean;
+    volume_base?: boolean;
+    range_breakout?: boolean;
+    breakout_volume?: boolean;
+    breakout_level?: number;
+    vol_vs_avg?: number;
+    price_change_breakout_pct?: number;
+  };
   active_setups?: string[];
 }
 
@@ -79,10 +88,11 @@ function MetricRow({
 }
 
 export default function SignalDiagnostics({ diagnostics }: { diagnostics: Diagnostics }) {
-  const { mvrb, accumulation, obv, active_setups = [] } = diagnostics;
+  const { mvrb, accumulation, obv, vol_accum_breakout, active_setups = [] } = diagnostics;
 
   const showObvHighlight = obv?.obv_divergence && (obv?.price_change_15d_pct ?? 0) <= 2;
   const showVolAccum = accumulation?.volume_accumulation;
+  const showVolBreakout = vol_accum_breakout?.signal;
 
   return (
     <div className="space-y-4">
@@ -164,6 +174,36 @@ export default function SignalDiagnostics({ diagnostics }: { diagnostics: Diagno
           <StatusPill active={!!accumulation?.volume_accumulation} label="Vol Accumulation" />
           <StatusPill active={!!accumulation?.price_consolidation} label="Consolidating" />
           <StatusPill active={!!accumulation?.signal} label="Full Breakout Setup" />
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-section-title !normal-case !tracking-normal flex items-center gap-2">
+          <TrendingUp className="h-3.5 w-3.5" style={{ color: "var(--accent)" }} />
+          <LabelWithInfo
+            label="Volume Accumulation + Breakout"
+            definition={EQUITY_DEFINITIONS.vol_accum_breakout}
+          />
+        </h3>
+        {showVolBreakout && (
+          <div
+            className="mb-3 rounded-md px-3 py-2 text-xs"
+            style={{ background: "var(--accent-muted)", border: "1px solid rgba(245,78,0,0.25)", color: "var(--accent)" }}
+          >
+            <strong>Breakout confirmed:</strong> Close above ₹{vol_accum_breakout?.breakout_level} (+{vol_accum_breakout?.price_change_breakout_pct}%)
+            on {vol_accum_breakout?.vol_vs_avg}x volume after a volume base.
+          </div>
+        )}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MetricRow label="Volume base built" value={vol_accum_breakout?.volume_base ?? false} defKey="vol_accum_breakout" highlight={vol_accum_breakout?.volume_base} />
+          <MetricRow label="Range breakout" value={vol_accum_breakout?.range_breakout ?? false} defKey="vol_accum_breakout" highlight={vol_accum_breakout?.range_breakout} />
+          <MetricRow label="Breakout volume" value={vol_accum_breakout?.breakout_volume ?? false} defKey="vol_ratio" highlight={vol_accum_breakout?.breakout_volume} />
+          <MetricRow label="Vol vs 20d avg" value={`${vol_accum_breakout?.vol_vs_avg ?? 0}x`} defKey="vol_ratio" />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <StatusPill active={!!vol_accum_breakout?.volume_base} label="Vol Base" />
+          <StatusPill active={!!vol_accum_breakout?.range_breakout} label="Above Range" />
+          <StatusPill active={!!vol_accum_breakout?.signal} label="Full Breakout" />
         </div>
       </div>
 

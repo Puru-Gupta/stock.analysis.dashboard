@@ -316,15 +316,21 @@ function EquityPageContent() {
               <p className="font-medium" style={{ color: "var(--fg-primary)" }}>No stocks matched this filter</p>
               <p className="mt-2 leading-relaxed">
                 {recFilter === "Buy" &&
-                  "Buy now requires tech≥65, fund≥55, RS≥1.0, volume≥1.2× (or confirmed setup), R:R≥1.8, RSI≤70, and not in a downtrend. Empty usually means the universe lacks institutional-grade confluence — try Watch or clear filters."}
+                  "Buy requires tech≥65, fund≥55, RS≥1.0, volume≥1.2×, R:R≥1.8, RSI≤70, and risk-on regime. Nifty 50/100 usually yield 0–2 Buys; Bank/Sector/Midcap often yield zero — that is the strict gate, not a broken scan. Try Recommendation → All or Watch."}
                 {recFilter === "Sell" &&
                   "Sell needs final score under 35, or a downtrend with tech and fund both under 50. Empty usually means the market is not broadly weak — not a broken filter."}
-                {recFilter === "Watch" && "No Watch names in the scanned pool — try clearing other filters."}
+                {recFilter === "Watch" && "No Watch names in the scanned pool — try clearing Risk/Setup filters or switch to All."}
                 {recFilter === "Avoid" && "No Avoid names found. Try All to see the full distribution."}
                 {!recFilter && (universe === "midcap" || universe === "smallcap") &&
-                  "Mid/small-cap scans default to Cheap+Fair valuation and drop expensive PE/PB names. Try Premium, clear Risk/Setup, or switch universe."}
-                {!recFilter && universe !== "midcap" && universe !== "smallcap" &&
-                  "No results after risk/setup filters. Clear Setup or Risk and scan again."}
+                  "Mid/small-cap scans apply Cheap+Fair valuation by default (expensive names dropped). Try Valuation → Premium, or clear Risk/Setup filters."}
+                {!recFilter && universe === "banknifty" &&
+                  "Bank Nifty scan works — results are often Watch in neutral regimes. Switch Recommendation to All if you filtered to Buy."}
+                {!recFilter && universe === "sector" &&
+                  "Sector scan uses 7–8 names per sector. If empty, clear Setup/Risk filters or pick a different sector."}
+                {!recFilter && universe === "nifty500" &&
+                  "Nifty 500 scans up to 120 names (takes 2–4 min). If empty, clear Setup/Risk filters."}
+                {!recFilter && !["midcap", "smallcap", "banknifty", "sector", "nifty500"].includes(universe) &&
+                  "No results after filters. Clear Setup or Risk and scan again."}
               </p>
             </div>
           )}

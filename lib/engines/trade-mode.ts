@@ -24,7 +24,7 @@ export function detectTradeMode(input: {
   bb_oversold?: boolean;
 }): TradeModeResult {
   const setups = input.active_setups || [];
-  const trendSetups = ["mvrb_momentum", "adx_ema_trend", "macd_cross", "bb_squeeze_breakout"];
+  const trendSetups = ["mvrb_momentum", "adx_ema_trend", "macd_cross", "bb_squeeze_breakout", "vol_accum_breakout"];
   const accumSetups = ["obv_accumulation", "volume_breakout_setup"];
 
   const hasTrend = trendSetups.some((s) => setups.includes(s)) ||

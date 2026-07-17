@@ -176,6 +176,51 @@ export function accumulationBreakout(bars: OHLCVBar[]) {
   };
 }
 
+/** Volume built during base + price breaks range high on rising volume. */
+export function volumeAccumulationWithBreakout(bars: OHLCVBar[]) {
+  const base = accumulationBreakout(bars);
+  const empty = {
+    signal: false,
+    volume_base: false,
+    range_breakout: false,
+    breakout_volume: false,
+    breakout_level: 0,
+    vol_vs_avg: 0,
+    price_change_breakout_pct: 0,
+  };
+  if (bars.length < 40) return empty;
+
+  const closes = bars.map((b) => b.close);
+  const highs = bars.map((b) => b.high);
+  const vols = bars.map((b) => b.volume);
+  const volSma = rollingMean(vols, 20);
+  const i = bars.length - 1;
+
+  const avgVol20 = vols.slice(-20).reduce((s, v) => s + v, 0) / 20;
+  const avgVol60 = vols.slice(-60).reduce((s, v) => s + v, 0) / 60;
+  const volumeBase =
+    avgVol20 >= avgVol60 * 1.2 ||
+    (base.price_consolidation && base.volume_accumulation) ||
+    base.signal;
+
+  const rangeHigh = Math.max(...highs.slice(-21, -1));
+  const rangeBreakout = closes[i] > rangeHigh * 1.001;
+  const breakoutVolume = vols[i] >= (volSma[i] || 0) * 1.2;
+  const breakoutPct = rangeHigh > 0 ? Math.round(((closes[i] - rangeHigh) / rangeHigh) * 10000) / 100 : 0;
+
+  const signal = volumeBase && rangeBreakout && breakoutVolume;
+
+  return {
+    signal,
+    volume_base: volumeBase,
+    range_breakout: rangeBreakout,
+    breakout_volume: breakoutVolume,
+    breakout_level: Math.round(rangeHigh * 100) / 100,
+    vol_vs_avg: Math.round((vols[i] / (volSma[i] || 1)) * 100) / 100,
+    price_change_breakout_pct: breakoutPct,
+  };
+}
+
 export function obvAccumulation(bars: OHLCVBar[]) {
   if (bars.length < 60) {
     return { signal: false, obv_divergence: false, volume_spike: false, price_change_15d: 0, obv_change_15d: 0, price_down_flat: false };
@@ -205,6 +250,7 @@ export function obvAccumulation(bars: OHLCVBar[]) {
 export function computeTechnicalScores(bars: OHLCVBar[], niftyBars: OHLCVBar[]) {
   const mvrb = mvrbMetrics(bars, niftyBars);
   const accum = accumulationBreakout(bars);
+  const volBreakout = volumeAccumulationWithBreakout(bars);
   const obv = obvAccumulation(bars);
   const trend = detectTrend(bars);
   const { support, resistance } = findSupportResistance(bars);
@@ -306,6 +352,11 @@ export function computeTechnicalScores(bars: OHLCVBar[], niftyBars: OHLCVBar[]) 
   if (mvrb && mvrb.rs_vs_nifty > 1) signals.push(`Outperforming Nifty (RS: ${mvrb.rs_vs_nifty})`);
   if (mvrb?.near_52w_high) signals.push("Trading near 52-week high");
   if (accum.signal) signals.push("Consolidation with volume accumulation — potential breakout");
+  if (volBreakout.signal) {
+    signals.push(
+      `Volume accumulation breakout — above ₹${volBreakout.breakout_level} on ${volBreakout.vol_vs_avg}x volume`,
+    );
+  }
   if (obv.obv_divergence) {
     signals.push(
       `OBV rising (+${obv.obv_change_15d}) while price ${(obv.price_change_15d_pct ?? 0) <= 0 ? "down" : "flat"} (${obv.price_change_15d_pct ?? 0}%) — quiet accumulation`,
@@ -319,6 +370,7 @@ export function computeTechnicalScores(bars: OHLCVBar[], niftyBars: OHLCVBar[]) 
   const activeSetups: string[] = [];
   if (obv.obv_divergence && obv.price_down_flat) activeSetups.push("obv_accumulation");
   if (accum.signal) activeSetups.push("volume_breakout_setup");
+  if (volBreakout.signal) activeSetups.push("vol_accum_breakout");
   // Stricter MVRB setup: need real volume expansion
   if (mvrb && mvrb.ret_3m > 12 && mvrb.vol_ratio >= 1.3 && mvrb.rs_vs_nifty >= 1.0) {
     activeSetups.push("mvrb_momentum");
@@ -338,6 +390,7 @@ export function computeTechnicalScores(bars: OHLCVBar[], niftyBars: OHLCVBar[]) 
     rsi,
     mvrb,
     accumulation: accum,
+    vol_accum_breakout: volBreakout,
     obv,
     strategy_confluence: confluence,
     active_setups: activeSetups,

@@ -41,6 +41,12 @@ export const SCAN_PRESETS: ScanPreset[] = [
     params: { universe: "nifty100", setup: "pre_breakout" },
   },
   {
+    id: "vol-accum-breakout",
+    label: "Vol accum breakout",
+    description: "Confirmed range break on volume",
+    params: { universe: "nifty100", setup: "vol_accum_breakout" },
+  },
+  {
     id: "trend-leaders",
     label: "Trend Leaders",
     description: "Nifty 100 high scores",

@@ -42,6 +42,7 @@ export interface EquityAnalysis {
   signal_diagnostics?: {
     mvrb?: Record<string, unknown> | null;
     accumulation?: Record<string, unknown>;
+    vol_accum_breakout?: Record<string, unknown>;
     obv?: Record<string, unknown>;
     active_setups?: string[];
   };
@@ -160,6 +161,7 @@ export interface ScanResult {
   obv_divergence?: boolean;
   volume_accumulation?: boolean;
   pre_breakout?: boolean;
+  vol_accum_breakout?: boolean;
   price_chg_15d?: number;
 }
 

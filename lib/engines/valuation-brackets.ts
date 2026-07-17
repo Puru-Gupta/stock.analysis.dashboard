@@ -6,8 +6,6 @@ export type ValuationBracket = "cheap" | "fair" | "premium" | "expensive" | "unk
 
 export type ValuationFilter = "" | "cheap" | "fair" | "premium" | "soft";
 
-const CRORE = 1e7; // ₹1 Cr in INR
-
 export interface ValuationInputs {
   pe_ratio?: number | null;
   pb_ratio?: number | null;
@@ -79,15 +77,13 @@ export function passesMarketCapBand(
   universe: string,
   marketCap: number | null | undefined,
 ): boolean {
+  // Mid/small lists are pre-curated in universes.ts — Yahoo mcap bands are stale
+  // (many index midcaps now exceed ₹50k Cr) and would wrongly drop valid names.
+  if (universe === "midcap" || universe === "smallcap") return true;
+
   const mcap = num(marketCap);
   if (mcap == null || mcap <= 0) return true;
 
-  if (universe === "midcap") {
-    return mcap >= 5_000 * CRORE && mcap <= 50_000 * CRORE;
-  }
-  if (universe === "smallcap") {
-    return mcap >= 1_000 * CRORE && mcap <= 20_000 * CRORE;
-  }
   return true;
 }
 
@@ -108,7 +104,8 @@ export function passesValuationFilter(opts: {
     if (valuation === "cheap" || valuation === "fair" || valuation === "premium") {
       return false;
     }
-    return fs >= 55;
+    // Soft filter: allow unknown fundamentals if composite score is acceptable
+    return fs >= 45;
   }
 
   const filter: ValuationFilter =

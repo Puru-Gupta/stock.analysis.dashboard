@@ -17,6 +17,7 @@ export function buildEquityAdvantages(analysis: {
     active_setups?: string[];
     obv?: { obv_divergence?: boolean };
     accumulation?: { volume_accumulation?: boolean; signal?: boolean };
+    vol_accum_breakout?: { signal?: boolean };
   };
   quality?: DataQualityReport;
 }): TradeAdvantage[] {
@@ -40,6 +41,9 @@ export function buildEquityAdvantages(analysis: {
   }
   if (setups.includes("volume_breakout_setup") || analysis.signal_diagnostics?.accumulation?.signal) {
     adj(adv, "Pre-breakout volume", "Rising volume near resistance without full breakout yet — early entry window.", "edge");
+  }
+  if (setups.includes("vol_accum_breakout") || analysis.signal_diagnostics?.vol_accum_breakout?.signal) {
+    adj(adv, "Volume accumulation breakout", "Range break on rising volume after a volume base — momentum continuation edge.", "edge");
   }
   if (analysis.trend === "uptrend" && analysis.signal === "Buy") {
     adj(adv, "Trend alignment", "Long bias matches primary trend — lower counter-trend washout risk.", "medium");

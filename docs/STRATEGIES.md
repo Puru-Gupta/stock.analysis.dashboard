@@ -189,6 +189,28 @@ These are the **specific strategies** the engine detects. A stock can have multi
 
 ---
 
+#### Volume Accumulation Breakout (`vol_accum_breakout`)
+
+**What it is:** Volume built during a base, then price closed above the 20-day range high on confirming volume — the post-accumulation breakout (distinct from pre-breakout `volume_breakout_setup`).
+
+**Trigger conditions:**
+- 20-day average volume ≥ 1.2× 60-day average **or** prior consolidation + volume accumulation
+- Close above prior 20-bar range high
+- Today's volume ≥ 1.2× 20-day average
+
+**When to use:**
+- You want names that already broke out after quiet accumulation
+- Momentum continuation in risk-on regimes
+- Pair with Buy/Watch filter and index regime check
+
+**Trade mode:** Trend follow
+
+**Entry:** On breakout close or first pullback to breakout level
+
+**Exit:** Stop below breakout level / recent swing low; trail under EMA20 after +1.5R
+
+---
+
 #### MVRB Momentum (`mvrb_momentum`)
 
 **What it is:** Momentum + Volume + Relative strength + Breakout — a systematic momentum filter for trending stocks.

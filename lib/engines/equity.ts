@@ -100,6 +100,7 @@ export async function analyzeEquity(
       active_setups: technical.active_setups,
       obv: technical.obv,
       accumulation: technical.accumulation,
+      vol_accum_breakout: technical.vol_accum_breakout,
     },
     quality: live.quality,
   });
@@ -145,6 +146,7 @@ export async function analyzeEquity(
     signal_diagnostics: {
       mvrb: technical.mvrb,
       accumulation: technical.accumulation,
+      vol_accum_breakout: technical.vol_accum_breakout,
       obv: technical.obv,
       active_setups: technical.active_setups,
     },
@@ -239,7 +241,13 @@ export async function scanUniverse(opts: {
   let symbols = UNIVERSES[universe] || UNIVERSES.nifty50;
   if (universe === "sector" && sector) symbols = SECTORS[sector] || SECTORS.IT;
 
-  const scanCap = Math.min(symbols.length, Math.max(limit * 3, 50));
+  // Scan full small universes; cap large ones but cover more than first 50 names
+  const scanCap =
+    symbols.length <= 20
+      ? symbols.length
+      : universe === "nifty500"
+        ? Math.min(symbols.length, 120)
+        : Math.min(symbols.length, Math.max(limit * 4, 80));
   const toScan = symbols.slice(0, scanCap);
 
   const niftyLive = await fetchLiveMarketBundle(INDEX_SYMBOL, { days: 365 });
@@ -263,6 +271,7 @@ export async function scanUniverse(opts: {
     if (setup === "obv_accumulation" && !diag?.obv?.obv_divergence) continue;
     if (setup === "volume_accumulation" && !diag?.accumulation?.volume_accumulation) continue;
     if (setup === "pre_breakout" && !diag?.accumulation?.signal) continue;
+    if (setup === "vol_accum_breakout" && !diag?.vol_accum_breakout?.signal) continue;
 
     const fund = a.fundamentals || {};
     const pe_ratio = fund.pe_ratio ?? null;
@@ -320,6 +329,7 @@ export async function scanUniverse(opts: {
       obv_divergence: diag?.obv?.obv_divergence ?? false,
       volume_accumulation: diag?.accumulation?.volume_accumulation ?? false,
       pre_breakout: diag?.accumulation?.signal ?? false,
+      vol_accum_breakout: diag?.vol_accum_breakout?.signal ?? false,
       price_chg_15d: diag?.obv?.price_change_15d_pct ?? 0,
       accuracy_score: a.data_quality?.accuracy_score,
       index_regime_label: regime.label,

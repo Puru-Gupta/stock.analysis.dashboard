@@ -149,13 +149,14 @@ export function combineDecision(
   const hasConfirmedSetup =
     setups.includes("obv_accumulation") ||
     setups.includes("volume_breakout_setup") ||
+    setups.includes("vol_accum_breakout") ||
     setups.includes("macd_cross") ||
     setups.includes("adx_ema_trend") ||
     setups.includes("bb_squeeze_breakout");
 
   const modeAlignedSetup =
     tradeMode === "trend"
-      ? setups.some((s) => ["mvrb_momentum", "adx_ema_trend", "macd_cross", "bb_squeeze_breakout"].includes(s))
+      ? setups.some((s) => ["mvrb_momentum", "adx_ema_trend", "macd_cross", "bb_squeeze_breakout", "vol_accum_breakout"].includes(s))
       : tradeMode === "accumulate"
         ? setups.some((s) => ["obv_accumulation", "volume_breakout_setup"].includes(s))
         : hasConfirmedSetup;

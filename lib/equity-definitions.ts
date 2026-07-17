@@ -47,6 +47,8 @@ export const EQUITY_DEFINITIONS: Record<string, string> = {
     "Bollinger Band width is narrowing (below 75% of its 20-day average). Price is compressing before a potential breakout.",
   pre_breakout:
     "Price is consolidating with volume building but has NOT yet hit 52-week high. Early accumulation phase.",
+  vol_accum_breakout:
+    "Volume base built (20d avg ≥ 1.2× 60d avg or prior consolidation) and price closed above the 20-day range high on ≥1.2× average volume — confirmed accumulation breakout.",
   pe_ratio:
     "Price-to-Earnings. Lower can mean cheaper; compare with sector and growth rate.",
   roe:
@@ -68,7 +70,7 @@ export const EQUITY_DEFINITIONS: Record<string, string> = {
   valuation_filter:
     "Mid/small-cap PE–PB brackets (sector-relative when mapped): Cheap / Fair / Premium. Mid/small scans default to Cheap+Fair.",
   setup_filter:
-    "Narrow results to specific patterns: OBV accumulation, volume accumulation, or pre-breakout.",
+    "Narrow results to specific patterns: OBV accumulation, volume accumulation, pre-breakout, or volume accumulation with confirmed breakout.",
   index_regime:
     "Nifty risk-on / neutral / risk-off from EMA50/200 stack and 20d return. Fresh cash Buys are blocked in risk-off.",
   trade_mode:
@@ -121,6 +123,7 @@ export const GLOSSARY_SECTIONS: { title: string; items: [string, string][] }[] =
       ["RS vs Nifty", "rs_vs_nifty"],
       ["OBV Divergence", "obv_divergence"],
       ["Volume Accumulation", "volume_accumulation"],
+      ["Vol Accum + Breakout", "vol_accum_breakout"],
       ["P/E Ratio", "pe_ratio"],
       ["ROE", "roe"],
       ["Debt/Equity", "debt_to_equity"],
@@ -140,6 +143,12 @@ export const SIGNAL_SETUPS = {
     description:
       "Price is consolidating near 20-SMA with narrowing range and today's volume spike. Classic pre-breakout pattern from the mvsp.py strategy.",
     action: "Watch for breakout above resistance with volume",
+  },
+  vol_accum_breakout: {
+    title: "Volume Accumulation + Breakout",
+    description:
+      "Volume built during a base (20d avg above 60d avg or prior consolidation) and price broke above the 20-day range high on rising volume — post-accumulation breakout.",
+    action: "Trend follow entry; stop below breakout level or recent swing low",
   },
   mvrb_momentum: {
     title: "MVRB Momentum",

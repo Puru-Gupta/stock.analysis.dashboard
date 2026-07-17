@@ -131,6 +131,7 @@ const SETUP_OPTIONS: PillOption[] = [
   { value: "obv_accumulation", label: "OBV accumulation" },
   { value: "volume_accumulation", label: "Volume accumulation" },
   { value: "pre_breakout", label: "Pre-breakout" },
+  { value: "vol_accum_breakout", label: "Vol accum + breakout" },
 ];
 
 const VALUATION_OPTIONS: PillOption[] = [
