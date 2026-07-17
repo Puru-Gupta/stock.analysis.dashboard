@@ -1,0 +1,206 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name="ProgId" content="Word.Document">
+<meta name="Generator" content="Money Dashboard md-to-doc">
+<title>USER GUIDE</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
+<style>
+  @page { size: A4; margin: 2.54cm; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
+  code { font-family: Consolas, monospace; background: #f5f5f5; padding: 1pt 3pt; }
+  table { font-size: 10pt; }
+  th, td { border: 1px solid #999; padding: 5pt 8pt; vertical-align: top; }
+  th { background: #f0f0f0; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1 style="font-size:22pt;color:#1a1a1a;border-bottom:2pt solid #333;padding-bottom:6pt;">Money Dashboard — User Guide</h1>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Practical guide to installing, configuring, and using the dashboard for Indian market research.</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">1. Installation</h2>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Requirements</h3>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Node.js 18+</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; npm</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; (Optional) Supabase account for persistent price storage</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Local setup</h3>
+<br>
+<pre style="background:#f5f5f5;padding:10pt;font-family:Consolas,monospace;font-size:9pt;border:1px solid #ddd;"><code>git clone &lt;your-repo-url>
+cd moneydashboard
+npm install
+cp .env.example .env.local
+# Edit .env.local with Supabase keys (optional but recommended)
+npm run dev</code></pre>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Open <strong>http://localhost:4321</strong></p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Production</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Deployed on Vercel at https://moneydashboard-eight.vercel.app</p>
+<br>
+<pre style="background:#f5f5f5;padding:10pt;font-family:Consolas,monospace;font-size:9pt;border:1px solid #ddd;"><code>vercel --prod</code></pre>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">2. Environment variables</h2>
+<br>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;"><tr><th style="background:#f0f0f0;font-weight:bold;">Variable</th><th style="background:#f0f0f0;font-weight:bold;">Required</th><th style="background:#f0f0f0;font-weight:bold;">Purpose</th></tr><tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Recommended</td><td>Server-side database access</td></tr></table>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Without Supabase, the app still works using live Yahoo/NSE fetches on every request.</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Verify connection:</p>
+<br>
+<pre style="background:#f5f5f5;padding:10pt;font-family:Consolas,monospace;font-size:9pt;border:1px solid #ddd;"><code>curl https://moneydashboard-eight.vercel.app/api/health</code></pre>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Expected with Supabase: <code>"database":"connected"</code></p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">3. Pages overview</h2>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Command Center (<code>/</code>)</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">Home page with links to all modules and market overview snapshot.</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Equity (<code>/equity</code>)</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Purpose:</strong> Multi-factor stock analysis for swing trading.</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>How to use:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Enter symbol (e.g. <code>RELIANCE.NS</code>) or run a universe scan</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. Review signal (Buy / Watch / Avoid), scores, and diagnostics</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Check regime banner — blocked Buys show as Watch</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">4. Use Position Sizer with the stop loss from analysis</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">5. Export scan results to CSV</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Scan filters:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Universe: Nifty 50, Midcap, Bank Nifty</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Signal: Buy, Watch, Avoid</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Sector, valuation bracket, trade mode</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Key panels:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Market Regime Banner — Nifty risk-on/off</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Signal Diagnostics — active setups (OBV, MVRB, MACD, etc.)</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Data Intel — source quality and accuracy score</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Compare — side-by-side two symbols</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Options (<code>/options</code>)</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Purpose:</strong> Movement-aware strike selection with IV, theta, and Greeks.</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>How to use:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Select Call/Put and Strategy Mode (Selling, Buying, Neutral, Directional)</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. Review <strong>Best Stocks</strong> scan table — click a row to analyze</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Check <strong>Volatility &amp; Time Decay</strong> panel (IV, IV/HV, vol change 7/15/30d)</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">4. Review <strong>Strategy Fit</strong> suitability badge</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">5. Use <strong>Strike Recommendations</strong> table — prefer rows with live NSE data</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Important:</strong> Only trade strikes when <strong>Data Source = Live Chain</strong>. Synthetic estimates are for research only.</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Futures (<code>/futures</code>)</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Purpose:</strong> Directional setup ideas for index/stock trends.</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>How to use:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Enter <code>NIFTY</code>, <code>BANKNIFTY</code>, or a stock symbol</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. Select strategy mode: Trend Following, Breakout, Pullback, Mean Reversion, Volatility Expansion</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Review Long/Short/Watch signal with entry, stop, target</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Note:</strong> Uses cash/index history — verify actual FUT contract on your broker.</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">Risk Dashboard (<code>/dashboard</code>)</h3>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Purpose:</strong> Market-wide temperature check.</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Shows:</strong></p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Buy / Watch / Avoid counts across Nifty 50</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Top 5 opportunities</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Index regime</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; Sector pulse (proxy stocks per sector)</p>
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><strong>Best use:</strong> Start here each morning before individual stock analysis.</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">4. API endpoints</h2>
+<br>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;"><tr><th style="background:#f0f0f0;font-weight:bold;">Endpoint</th><th style="background:#f0f0f0;font-weight:bold;">Example</th></tr><tr><td>Equity scan</td><td><code>GET /api/equity/scan?universe=nifty50&amp;signal=Buy&amp;limit=20</code></td></tr><tr><td>Options analyze</td><td><code>GET /api/options/analyze?symbol=RELIANCE.NS&amp;strategy_mode=selling&amp;option_type=call</code></td></tr><tr><td>Options scan</td><td><code>GET /api/options/scan?strategy_mode=selling&amp;option_type=call&amp;limit=12</code></td></tr><tr><td>Futures analyze</td><td><code>GET /api/futures/analyze?symbol=NIFTY&amp;strategy_mode=trend_following</code></td></tr><tr><td>Health</td><td><code>GET /api/health</code></td></tr><tr><td>Market overview</td><td><code>GET /api/market-overview</code></td></tr><tr><td>Risk dashboard</td><td><code>GET /api/risk-dashboard</code></td></tr></table>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">5. Recommended daily workflow</h2>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">For swing traders (15 minutes)</h3>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Open <strong>Dashboard</strong> → note regime (Risk-on / Neutral / Risk-off)</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. If Risk-off → skip new Buys; review watchlist only</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Open <strong>Equity</strong> → Scan → Filter <strong>Buy</strong> → Sort by score</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">4. Analyze top 3 names → confirm R:R ≥ 1.8, RS ≥ 1.0, active setup</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">5. Size position using stop loss and 1–2% risk rule</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">For options sellers (20 minutes)</h3>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Check Dashboard regime</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. Open <strong>Options</strong> → Mode: <strong>Selling</strong> → refresh stock scan</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Pick names with <strong>Favorable</strong> fit and stable 15d movement</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">4. Analyze → confirm <strong>Live Chain</strong>, IV/HV &gt; 1.0, P(OTM) ≥ 70%</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">5. Verify strike premium and margin on broker (Kite/Upstox)</p>
+<br>
+<h3 style="font-size:13pt;color:#333;margin-top:14pt;">For index traders (10 minutes)</h3>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">1. Dashboard regime</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">2. <strong>Futures</strong> → NIFTY → Trend Following or Breakout mode</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">3. Cross-check with Equity analysis on index proxy if needed</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">6. Understanding signals</h2>
+<br>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;"><tr><th style="background:#f0f0f0;font-weight:bold;">Signal</th><th style="background:#f0f0f0;font-weight:bold;">Meaning</th><th style="background:#f0f0f0;font-weight:bold;">Action</th></tr><tr><td><strong>Buy</strong></td><td>Standard gates passed</td><td>Normal position size</td></tr><tr><td><strong>Watchlist</strong></td><td>Setup forming or one gate failed</td><td>Monitor; wait for improvement</td></tr><tr><td><strong>Avoid</strong></td><td>Weak profile or hard veto</td><td>Do not enter long</td></tr><tr><td><strong>Sell / Avoid</strong></td><td>Downtrend + weak scores</td><td>Exit bias on existing holdings</td></tr></table>
+<br>
+<p style="margin:6pt 0;line-height:1.5;">See [STRATEGIES.md](./STRATEGIES.md) for full gate definitions.</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">7. Data quality tips</h2>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>Accuracy score ≥ 75</strong> — reliable for decision-making</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>Price spread &gt; 2.5%</strong> — verify spot on broker before trading</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>Bar count &lt; 60</strong> — insufficient history; skip or use caution</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>Options: chain_available = false</strong> — do not trade synthetic strikes</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>Connect Supabase</strong> — improves history depth and reduces fetch errors</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">8. Troubleshooting</h2>
+<br>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12pt 0;"><tr><th style="background:#f0f0f0;font-weight:bold;">Issue</th><th style="background:#f0f0f0;font-weight:bold;">Fix</th></tr><tr><td>Options show "Estimated"</td><td>Symbol may lack NSE F&amp;O chain; try NIFTY/BANKNIFTY or large F&amp;O names</td></tr><tr><td>Slow scan</td><td>Nifty 50 full scan takes 30–60s; dashboard API has extended timeout</td></tr><tr><td>Database not configured</td><td>Add Supabase env vars in Vercel and redeploy</td></tr><tr><td>Wrong/stale price</td><td>Check Data Intel panel; compare agent quotes</td></tr></table>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<h2 style="font-size:16pt;color:#222;border-bottom:1pt solid #ccc;margin-top:18pt;">9. Related documentation</h2>
+<br>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>[STRATEGIES.md](./STRATEGIES.md)</strong> — Complete strategy and selection playbook</p>
+<p style="margin:4pt 0 4pt 18pt;text-indent:-12pt;">&#8226; <strong>[../README.md](../README.md)</strong> — Project setup and architecture</p>
+<br>
+<hr style="border:none;border-top:1pt solid #ccc;margin:16pt 0;">
+<br>
+<p style="margin:6pt 0;line-height:1.5;"><em>Personal research and educational use only. Not financial advice.</em></p>
+<br>
+<p style="margin-top:24pt;font-size:9pt;color:#888;">Generated from USER_GUIDE.md — Money Dashboard — 2026-07-17</p>
+</body>
+</html>

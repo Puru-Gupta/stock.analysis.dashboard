@@ -1,0 +1,14 @@
+node_modules/
+.next/
+backend/venv/
+backend/cache/
+backend/__pycache__/
+backend/app/__pycache__/
+*.pyc
+.env
+.env.local
+.env*.local
+.DS_Store
+.vercel
+.playwright-cli/
+docs/*.html

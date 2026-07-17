@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Money Dashboard — Strategy Guide</title>
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; max-width: 820px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 2rem; border-bottom: 2px solid #333; padding-bottom: 0.5rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; color: #222; border-bottom: 1px solid #ccc; }
+  h3 { font-size: 1.15rem; margin-top: 1.5rem; }
+  h4 { font-size: 1rem; margin-top: 1rem; }
+  blockquote { border-left: 4px solid #f59e0b; margin: 1rem 0; padding: 0.5rem 1rem; background: #fffbeb; }
+  pre { background: #f4f4f5; padding: 1rem; overflow-x: auto; font-size: 0.85rem; border-radius: 4px; }
+  code { background: #f4f4f5; padding: 0.1rem 0.3rem; font-size: 0.9em; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; }
+  tr:first-child td { font-weight: bold; background: #f4f4f5; }
+  td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; }
+  li { margin: 0.25rem 0; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+  @media print { body { padding: 0; } h2 { page-break-before: auto; } }
+</style>
+</head>
+<body>
+<h1>Money Dashboard — Strategy Guide</h1>
+
+Complete reference for every strategy, signal, and selection workflow in the dashboard. Use this document to understand <strong>what the engine is doing</strong>, <strong>when each strategy applies</strong>, and <strong>how to leverage the dashboard for stock selection</strong>.
+
+<blockquote><strong>Disclaimer:</strong> This tool is for personal research and education only. It is not financial advice. Always verify prices, lot sizes, and margin on your broker before trading.</blockquote>
+
+<hr>
+
+<h2>Table of Contents</h2>
+
+1. [How the Dashboard Thinks](#1-how-the-dashboard-thinks)
+2. [Stock Selection Workflow (Step-by-Step)](#2-stock-selection-workflow-step-by-step)
+3. [Market Regime Gate](#3-market-regime-gate)
+4. [Equity Strategies](#4-equity-strategies)
+5. [Fundamental Scoring](#5-fundamental-scoring)
+6. [Buy / Watch / Avoid Decision Logic](#6-buy--watch--avoid-decision-logic)
+7. [Trade Modes & Exit Plans](#7-trade-modes--exit-plans)
+8. [Options Strategies](#8-options-strategies)
+9. [Futures Strategies](#9-futures-strategies)
+10. [Universe Scans & Ranking](#10-universe-scans--ranking)
+11. [Data Quality & When to Trust Signals](#11-data-quality--when-to-trust-signals)
+12. [Quick Reference Tables](#12-quick-reference-tables)
+
+<hr>
+
+<h2>1. How the Dashboard Thinks</h2>
+
+The dashboard is built as a <strong>multi-layer research terminal</strong>, not a signal bot. Every recommendation passes through stacked filters:
+
+<pre><code>
+Market Data (multi-source)
+        ↓
+Technical Score + Active Setups
+        ↓
+Fundamental Score (sector-relative)
+        ↓
+Index Regime Gate (Nifty risk-on/off)
+        ↓
+Trade Mode (trend vs accumulate)
+        ↓
+Hard Buy Gates (R:R, RS, volume, RSI)
+        ↓
+Signal: Buy / Watch / Avoid + Entry/Stop/Target
+</code></pre>
+
+<strong>Core philosophy:</strong>
+<li><strong>Never loosen thresholds</strong> to produce more signals. Empty Buy scans are intentional.</li>
+<li><strong>Confluence over single indicators</strong> — MACD alone does not trigger a Buy.</li>
+<li><strong>Regime first</strong> — even a perfect stock setup is blocked when Nifty is risk-off.</li>
+<li><strong>Defined risk</strong> — every Buy includes entry zone, stop loss, targets, and invalidation.</li>
+
+<strong>Best suited for:</strong> Swing traders (2–6 weeks to 3 months) on Nifty 50 / liquid large caps.
+
+<hr>
+
+<h2>2. Stock Selection Workflow (Step-by-Step)</h2>
+
+<h3>Morning routine (5–10 minutes)</h3>
+
+1. <strong>Open Command Center</strong> (<code>/</code>) or <strong>Risk Dashboard</strong> (<code>/dashboard</code>)
+   - Check <strong>Nifty regime</strong> banner: Risk-on / Neutral / Risk-off
+   - If <strong>Risk-off</strong> → skip fresh cash Buys; focus on watchlist or hedging
+
+2. <strong>Run an equity scan</strong> (<code>/equity</code> → Scan tab)
+   - Universe: <code>nifty50</code> (default) or sector filter
+   - Filter: <strong>Buy</strong> signals only
+   - Sort by: <code>final_score</code> descending
+
+3. <strong>Review top 3–5 names</strong>
+   - Click each symbol for full analysis
+   - Confirm: regime allows long, R:R ≥ 1.8, RS ≥ 1.0, volume ≥ 1.2×
+
+4. <strong>Check trade mode</strong>
+   - <strong>Trend follow</strong> → enter on pullback or breakout continuation
+   - <strong>Accumulate on dip</strong> → enter near support; patience for breakout
+
+5. <strong>Size the position</strong> (Equity page → Position Sizer)
+   - Use stop loss from analysis
+   - Risk 1–2% of capital per trade
+
+<h3>For options traders</h3>
+
+1. <strong>Open Options page</strong> (<code>/options</code>)
+2. <strong>Scan table</strong> — ranked Nifty 50 names by strategy fit (Selling / Buying / Neutral)
+3. <strong>Click a row</strong> → full analysis with IV, theta, movement context
+4. <strong>Only trade strikes marked <code>Live Chain</code></strong> — ignore synthetic estimates
+5. <strong>Confirm suitability badge</strong> = Favorable before selling premium
+
+<h3>For index / futures ideas</h3>
+
+1. <strong>Open Futures page</strong> (<code>/futures</code>)
+2. Analyze <code>NIFTY</code> or <code>BANKNIFTY</code> with strategy mode matching your view
+3. Use output as <strong>directional thesis</strong> — verify on broker with actual FUT contract
+
+<hr>
+
+<h2>3. Market Regime Gate</h2>
+
+<strong>Engine:</strong> <code>lib/engines/regime.ts</code>
+
+The regime gate evaluates <strong>Nifty 50 index</strong> using:
+<li>EMA 50 / EMA 200 stack</li>
+<li>20-day Nifty return</li>
+<li>Price vs EMA 50</li>
+
+<tr><td>Regime</td><td>Conditions</td><td>Effect on Buys</td></tr>
+<tr><td>--------</td><td>-----------</td><td>----------------</td></tr>
+<tr><td><strong>Risk-on</strong></td><td>Nifty above EMA50/200 stack, 20d return ≥ 0%</td><td>Fresh cash Buys allowed</td></tr>
+<tr><td><strong>Neutral</strong></td><td>Mixed signals</td><td>Buys allowed only if Nifty <strong>above EMA50</strong></td></tr>
+<tr><td><strong>Risk-off</strong></td><td>Nifty below EMA200, or 20d return ≤ −5%, or bearish EMA stack</td><td><strong>Fresh cash Buys blocked</strong> → downgraded to Watch</td></tr>
+
+<h3>How to use it</h3>
+
+<li><strong>Risk-on:</strong> Full position sizing on Buy signals</li>
+<li><strong>Neutral:</strong> Half size; prefer stocks with RS > 1.1 and confirmed setups</li>
+<li><strong>Risk-off:</strong> No new longs. Review existing positions; consider cash or hedges</li>
+
+<blockquote>The regime gate does <strong>not</strong> use India VIX. It is a trend/momentum filter on Nifty structure.</blockquote>
+
+<hr>
+
+<h2>4. Equity Strategies</h2>
+
+Equity analysis combines a <strong>composite technical score</strong> (0–100) with <strong>named setups</strong> that trigger when specific patterns confirm.
+
+<strong>Engine:</strong> <code>lib/engines/technical.ts</code>, <code>lib/engines/strategies.ts</code>
+
+<h3>4.1 Technical Score Components</h3>
+
+<tr><td>Component</td><td>Weight</td><td>What it measures</td></tr>
+<tr><td>-----------</td><td>--------</td><td>-----------------</td></tr>
+<tr><td>Trend</td><td>25%</td><td>Uptrend / downtrend / neutral via SMA20/50 + swing structure</td></tr>
+<tr><td>Momentum</td><td>20%</td><td>3-month return, RSI band, MACD histogram</td></tr>
+<tr><td>Volume</td><td>20%</td><td>Current volume vs 20-day average</td></tr>
+<tr><td>Support/Resistance</td><td>15%</td><td>Distance to 60-day support/resistance zones</td></tr>
+<tr><td>Relative Strength</td><td>20%</td><td>3-month excess return vs Nifty</td></tr>
+<tr><td>Setup bonus</td><td>up to +15</td><td>Confirmed OBV, accumulation, or confluence patterns</td></tr>
+
+<h3>4.2 Active Setups (Named Strategies)</h3>
+
+These are the <strong>specific strategies</strong> the engine detects. A stock can have multiple active setups.
+
+<hr>
+
+<h4>OBV Accumulation (<code>obv_accumulation</code>)</h4>
+
+<strong>What it is:</strong> On-Balance Volume rising while price is flat or down — "quiet accumulation" by institutions.
+
+<strong>Trigger conditions:</strong>
+<li>OBV change over 15 days is <strong>positive</strong></li>
+<li>Price change over 15 days is <strong>flat or down</strong> (−8% to +2%)</li>
+<li>True divergence required (not volume spike alone)</li>
+
+<strong>When to use:</strong>
+<li>You believe smart money is building a position before a move</li>
+<li>Stock is in a base/consolidation, not chasing highs</li>
+<li>Fundamentals are acceptable (fund score ≥ 55)</li>
+
+<strong>Trade mode:</strong> Accumulate on dip
+
+<strong>Entry:</strong> Near support or entry zone; stop below structural low
+
+<strong>Exit:</strong> Breakout above consolidation within 15 sessions, or time stop at 30 days
+
+<strong>Risk:</strong> False accumulation — volume dries up, no breakout follows
+
+<hr>
+
+<h4>Volume Breakout Setup (<code>volume_breakout_setup</code>)</h4>
+
+<strong>What it is:</strong> Price consolidating in a tight Bollinger band with rising volume near the 20-SMA — pre-breakout coiling.
+
+<strong>Trigger conditions:</strong>
+<li>Bollinger band width compressed (< 75% of 20-day average width)</li>
+<li>Volume > 1.5× 20-day average</li>
+<li>Price within 3% of 20-SMA</li>
+<li>Not already at 52-week high</li>
+
+<strong>When to use:</strong>
+<li>Anticipating a directional move out of consolidation</li>
+<li>Volume confirms participation before the break</li>
+<li>Combine with regime check — breakouts fail in risk-off markets</li>
+
+<strong>Trade mode:</strong> Accumulate on dip (pre-breakout) or Trend follow (post-breakout)
+
+<strong>Entry:</strong> On close above recent range high with volume, or scale in near 20-SMA
+
+<strong>Exit:</strong> Time stop if no breakout in 15 sessions
+
+<hr>
+
+<h4>MVRB Momentum (<code>mvrb_momentum</code>)</h4>
+
+<strong>What it is:</strong> Momentum + Volume + Relative strength + Breakout — a systematic momentum filter for trending stocks.
+
+<strong>Trigger conditions:</strong>
+<li>3-month return > 12%</li>
+<li>Volume ratio ≥ 1.3× (vs 20-day avg)</li>
+<li>Relative strength vs Nifty ≥ 1.0</li>
+<li>Often near 52-week high</li>
+
+<strong>When to use:</strong>
+<li>Strong trending market (risk-on regime)</li>
+<li>Leader stocks outperforming Nifty</li>
+<li>You accept buying closer to highs with volume confirmation</li>
+
+<strong>Trade mode:</strong> Trend follow
+
+<strong>Entry:</strong> Pullback to entry zone or breakout above resistance
+
+<strong>Exit:</strong> Trail stop under EMA20 after +1.5R; cut if RS drops below 0.9 for 5 sessions
+
+<strong>Risk:</strong> Chasing extended moves; RSI > 70 blocks fresh Buys
+
+<hr>
+
+<h4>MACD Cross (<code>macd_cross</code>)</h4>
+
+<strong>What it is:</strong> MACD line crosses above signal line with rising histogram — classic momentum confirmation.
+
+<strong>Trigger conditions:</strong>
+<li>Part of <strong>bullish confluence</strong> (≥ 3 bullish votes)</li>
+<li>MACD bullish crossover OR MACD above signal with rising histogram</li>
+
+<strong>When to use:</strong>
+<li>Confirming a trend already in place</li>
+<li>Never used alone — requires confluence with ADX, EMA stack, or Bollinger</li>
+
+<strong>Trade mode:</strong> Trend follow
+
+<hr>
+
+<h4>ADX + EMA Trend (<code>adx_ema_trend</code>)</h4>
+
+<strong>What it is:</strong> ADX ≥ 25 (trending market) with +DI > −DI and bullish EMA stack (price > EMA20 > EMA50).
+
+<strong>Trigger conditions:</strong>
+<li>ADX trending (≥ 25)</li>
+<li>+DI dominates −DI</li>
+<li>Price above EMA20 above EMA50</li>
+
+<strong>When to use:</strong>
+<li>Established trends with measurable directional strength</li>
+<li>Avoid in choppy/sideways markets (ADX < 25)</li>
+
+<strong>Trade mode:</strong> Trend follow
+
+<hr>
+
+<h4>Bollinger Squeeze Breakout (<code>bb_squeeze_breakout</code>)</h4>
+
+<strong>What it is:</strong> Bollinger bands compressed (width < 8%) with MACD rising in an uptrend — volatility expansion setup.
+
+<strong>Trigger conditions:</strong>
+<li>BB squeeze active</li>
+<li>MACD histogram rising</li>
+<li>Bullish EMA stack</li>
+<li>Part of bullish confluence</li>
+
+<strong>When to use:</strong>
+<li>Low-volatility consolidation before an expansion move</li>
+<li>Often precedes 5–15% moves on large caps</li>
+
+<strong>Trade mode:</strong> Trend follow
+
+<strong>Risk:</strong> False breakouts in neutral/risk-off regimes
+
+<hr>
+
+<h3>4.3 Strategy Confluence (Multi-Factor Vote)</h3>
+
+<strong>Engine:</strong> <code>lib/engines/strategies.ts</code> → <code>evaluateStrategyConfluence</code>
+
+The engine counts <strong>bullish votes</strong> from independent factors:
+
+<tr><td>Factor</td><td>Bullish vote when…</td></tr>
+<tr><td>--------</td><td>-------------------</td></tr>
+<tr><td>MACD</td><td>Above signal + rising histogram, or bullish cross</td></tr>
+<tr><td>ADX</td><td>ADX ≥ 25 and +DI > −DI</td></tr>
+<tr><td>EMA stack</td><td>Price > EMA20 > EMA50</td></tr>
+<tr><td>Bollinger</td><td>Oversold (mean-reversion bias)</td></tr>
+<tr><td>BB squeeze</td><td>Squeeze + MACD rising + uptrend</td></tr>
+
+<strong>Bullish confluence</strong> = ≥ 3 votes. Required for <strong>Strong Buy</strong> and preferred for standard <strong>Buy</strong>.
+
+<blockquote>Confluence <strong>confirms</strong> — it never overrides a failed R:R, RS, or regime gate.</blockquote>
+
+<hr>
+
+<h3>4.4 Entry, Stop, and Target Geometry</h3>
+
+<strong>Engine:</strong> <code>lib/engines/technical.ts</code>
+
+Based on ATR(14) and 60-day support/resistance:
+
+<tr><td>Trend</td><td>Entry Zone</td><td>Stop Loss</td><td>Target 1</td><td>Target 2</td></tr>
+<tr><td>-------</td><td>-----------</td><td>-----------</td><td>----------</td><td>----------</td></tr>
+<tr><td><strong>Uptrend</strong></td><td>Price − 0.3 ATR to Price + 0.1 ATR</td><td>max(Support − 0.3 ATR, Price − 1.5 ATR)</td><td>max(Resistance, Price + 1.5 ATR)</td><td>Price + 2.5 ATR</td></tr>
+<tr><td><strong>Downtrend</strong></td><td>Price − 0.2 ATR to Price</td><td>min(Resistance + 0.3 ATR, Price + 1.5 ATR)</td><td>min(Support, Price − 1.5 ATR)</td><td>Price − 2.5 ATR</td></tr>
+<tr><td><strong>Neutral</strong></td><td>Support to Price</td><td>Support − 0.5 ATR</td><td>Resistance</td><td>Midpoint</td></tr>
+
+<strong>Minimum R:R for Buy:</strong> 1.8 (standard), 2.0 (Strong Buy)
+
+<hr>
+
+<h2>5. Fundamental Scoring</h2>
+
+<strong>Engine:</strong> <code>lib/engines/fundamental.ts</code>
+
+Fundamental score (0–100) combines four pillars:
+
+<tr><td>Pillar</td><td>Weight</td><td>Key inputs</td></tr>
+<tr><td>--------</td><td>--------</td><td>-----------</td></tr>
+<tr><td>Quality</td><td>30%</td><td>ROE, profit margin, free cash flow</td></tr>
+<tr><td>Growth</td><td>25%</td><td>Revenue growth, earnings growth</td></tr>
+<tr><td>Valuation</td><td>25%</td><td>Sector-relative P/E or P/B, PEG, forward P/E</td></tr>
+<tr><td>Debt</td><td>20%</td><td>Debt-to-equity ratio</td></tr>
+
+<h3>Sector-relative valuation</h3>
+
+<li><strong>Banks / financials:</strong> P/B vs sector median (not P/E)</li>
+<li><strong>Other sectors:</strong> P/E vs sector median</li>
+<li><strong>PEG < 1:</strong> attractive; <strong>PEG > 2.5:</strong> rich</li>
+
+<h3>Fundamental thresholds</h3>
+
+<tr><td>Score</td><td>Label</td><td>Role in Buy decision</td></tr>
+<tr><td>-------</td><td>-------</td><td>----------------------</td></tr>
+<tr><td>≥ 70</td><td>Strong</td><td>Required for Strong Buy</td></tr>
+<tr><td>≥ 55</td><td>Good</td><td>Minimum for standard Buy</td></tr>
+<tr><td>40–54</td><td>Average</td><td>Watchlist only</td></tr>
+<tr><td>< 40</td><td>Weak</td><td>Blocks Buy even with strong tech</td></tr>
+
+<hr>
+
+<h2>6. Buy / Watch / Avoid Decision Logic</h2>
+
+<strong>Engine:</strong> <code>lib/engines/fundamental.ts</code> → <code>combineDecision</code>
+
+<h3>Signal tiers</h3>
+
+<tr><td>Signal</td><td>Requirements</td></tr>
+<tr><td>--------</td><td>-------------</td></tr>
+<tr><td><strong>Strong Buy</strong></td><td>Tech ≥ 70, Fund ≥ 70, uptrend, RS ≥ 1.1, vol ≥ 1.2×, R:R ≥ 2.0, RSI ≤ 70, ≥ 3 bullish confluence votes, regime allows</td></tr>
+<tr><td><strong>Buy</strong></td><td>Tech ≥ 65, Fund ≥ 55, not downtrend, RS ≥ 1.0, vol ≥ 1.2× (or confirmed setup), R:R ≥ 1.8, RSI ≤ 70, regime allows, plus confluence OR active setup OR (uptrend + vol ≥ 1.3×)</td></tr>
+<tr><td><strong>Buy (setup path)</strong></td><td>Confirmed setup + tech ≥ 60, fund ≥ 55, vol ≥ 1.2×, RS ≥ 1.0, R:R ≥ 1.8</td></tr>
+<tr><td><strong>Watchlist</strong></td><td>Mixed signals, mid-zone score, or failed single gate</td></tr>
+<tr><td><strong>Avoid / Sell</strong></td><td>Weak tech + weak fund, downtrend, or bearish confluence</td></tr>
+
+<h3>Post-decision vetoes (Buy → Watch/Avoid)</h3>
+
+Even after a Buy is computed, these <strong>hard vetoes</strong> apply:
+
+<tr><td>Veto</td><td>Effect</td></tr>
+<tr><td>------</td><td>--------</td></tr>
+<tr><td>Regime risk-off</td><td>Buy → Watch</td></tr>
+<tr><td>Downtrend</td><td>Buy → Avoid</td></tr>
+<tr><td>R:R < 1.8</td><td>Buy → Watch</td></tr>
+<tr><td>RSI > 70</td><td>Buy → Watch</td></tr>
+<tr><td>RS < 1.0</td><td>Buy → Watch</td></tr>
+<tr><td>Volume < 1.2× without setup</td><td>Buy → Watch</td></tr>
+
+<h3>Composite score</h3>
+
+<pre><code>
+final_score = technical_score × 0.55 + fundamental_score × 0.45
+</code></pre>
+
+Use <code>final_score</code> for <strong>ranking</strong> within a scan. Use <strong>signal + gates</strong> for <strong>action</strong>.
+
+<hr>
+
+<h2>7. Trade Modes & Exit Plans</h2>
+
+<strong>Engine:</strong> <code>lib/engines/trade-mode.ts</code>
+
+<h3>Trade modes</h3>
+
+The engine detects whether your edge is <strong>momentum</strong> or <strong>accumulation</strong> — these are incompatible entry styles.
+
+<tr><td>Mode</td><td>Active when…</td><td>Horizon</td><td>Time stop</td></tr>
+<tr><td>------</td><td>-------------</td><td>---------</td><td>-----------</td></tr>
+<tr><td><strong>Trend follow</strong></td><td>MVRB momentum, ADX/EMA trend, MACD cross, BB squeeze breakout; or near 52w high with RSI 50–70</td><td>1–3 months</td><td>45 trading days</td></tr>
+<tr><td><strong>Accumulate on dip</strong></td><td>OBV accumulation, volume breakout setup; or OBV divergence + RSI < 50</td><td>2–6 weeks</td><td>30 trading days</td></tr>
+<tr><td><strong>No clear mode</strong></td><td>Neither edge active</td><td>Wait</td><td>21 trading days</td></tr>
+
+<strong>Conflict resolution:</strong> If both trend and accumulation signals fire:
+<li>Near 52w high or 3M return > 15% → <strong>Trend follow</strong> wins</li>
+<li>Otherwise → <strong>Accumulate</strong> wins</li>
+
+<h3>Exit plan rules</h3>
+
+<strong>Trend follow:</strong>
+<li>Hard stop at structural invalidation</li>
+<li>Trail under EMA20 after +1.5R move</li>
+<li>Cut if RS vs Nifty < 0.9 for 5 consecutive sessions</li>
+
+<strong>Accumulate on dip:</strong>
+<li>Hard stop at support breach</li>
+<li>Exit if no breakout above consolidation within 15 sessions</li>
+<li>Take 1/3 off at +1R</li>
+
+<strong>Reduce position if:</strong>
+<li>Fundamental score drops below 50</li>
+<li>Index regime flips to risk-off</li>
+<li>RSI > 75 after entry without pullback hold</li>
+
+<hr>
+
+<h2>8. Options Strategies</h2>
+
+<strong>Engine:</strong> <code>lib/engines/options.ts</code>, <code>lib/engines/greeks.ts</code>
+
+<h3>Strategy modes</h3>
+
+<tr><td>Mode</td><td>Objective</td><td>Best market conditions</td></tr>
+<tr><td>------</td><td>-----------</td><td>----------------------</td></tr>
+<tr><td><strong>Selling</strong></td><td>Collect premium via OTM options</td><td>Range-bound tape, IV > HV, low 15d movement</td></tr>
+<tr><td><strong>Buying / Directional</strong></td><td>Long calls or puts for directional move</td><td>Clear trend, momentum intact, IV not extreme</td></tr>
+<tr><td><strong>Neutral</strong></td><td>Iron condor / range strategies</td><td>15d and 30d movement < 4–8%, no strong trend</td></tr>
+
+<h3>Underlying movement analysis</h3>
+
+Before any strike is recommended, the engine evaluates <strong>7 / 15 / 30-day price movement</strong>:
+
+<tr><td>Window</td><td>Trading days</td><td>Purpose</td></tr>
+<tr><td>--------</td><td>-------------</td><td>---------</td></tr>
+<tr><td>7 days</td><td>~5 bars</td><td>Recent momentum</td></tr>
+<tr><td>15 days</td><td>15 bars</td><td><strong>Primary window</strong> — expiry cycle alignment</td></tr>
+<tr><td>30 days</td><td>~22 bars</td><td>Medium-term range for strike width</td></tr>
+
+Each combination of (strategy mode × call/put) produces a <strong>suitability rating</strong>: Favorable / Caution / Avoid.
+
+<strong>Examples:</strong>
+<li><strong>Sell call + flat 15d movement (< 3%)</strong> → Favorable (range-bound ideal for call selling)</li>
+<li><strong>Sell call + 15d rally > 8%</strong> → Caution (continuation risk)</li>
+<li><strong>Sell put + 15d decline > 8%</strong> → Avoid (falling knife)</li>
+<li><strong>Buy call + uptrend + positive 15d</strong> → Favorable</li>
+<li><strong>Neutral + 15d/30d range compressed</strong> → Favorable for Iron Condor</li>
+
+<h3>Volatility metrics</h3>
+
+<tr><td>Metric</td><td>Meaning</td><td>How to use</td></tr>
+<tr><td>--------</td><td>---------</td><td>-----------</td></tr>
+<tr><td><strong>ATM IV</strong></td><td>Implied vol at nearest strike</td><td>Current option pricing richness</td></tr>
+<tr><td><strong>HV (20d)</strong></td><td>Historical realized volatility</td><td>Baseline for "normal" movement</td></tr>
+<tr><td><strong>IV/HV ratio</strong></td><td>IV ÷ HV</td><td>> 1.1 favors sellers; < 1.0 favors buyers</td></tr>
+<tr><td><strong>Vol change 7/15/30d</strong></td><td>HV change in percentage points</td><td>Rising vol → widen strikes; falling vol → tighter strikes OK</td></tr>
+
+<h3>Greeks (per strike)</h3>
+
+<tr><td>Greek</td><td>Meaning</td><td>Seller perspective</td><td>Buyer perspective</td></tr>
+<tr><td>-------</td><td>---------</td><td>-------------------</td><td>-------------------</td></tr>
+<tr><td><strong>Theta</strong></td><td>Daily premium decay (₹/day)</td><td>Positive income</td><td>Negative — time working against you</td></tr>
+<tr><td><strong>Delta</strong></td><td>Price sensitivity to ₹1 spot move</td><td>Lower delta OTM = less directional risk</td><td>Higher delta ITM = more leverage</td></tr>
+<tr><td><strong>Vega</strong></td><td>Sensitivity to 1% IV change</td><td>Benefits from IV crush</td><td>Hurt by IV expansion</td></tr>
+<tr><td><strong>7d decay</strong></td><td>Theta × 7</td><td>Expected weekly income (approx)</td><td>Expected weekly loss (approx)</td></tr>
+
+<h3>Named option structures</h3>
+
+<h4>Cash-Secured Put (CSP)</h4>
+<li><strong>When:</strong> Selling mode + Put + stable/uptrending stock</li>
+<li><strong>Logic:</strong> Sell OTM put below expected move; collect premium; willing to own stock at strike</li>
+<li><strong>Strike gate:</strong> P(OTM) ≥ 70%, strike ≥ 0.8× expected move from spot, live liquidity</li>
+
+<h4>Covered Call / Sell OTM Call</h4>
+<li><strong>When:</strong> Selling mode + Call + mild extension (5–10% in 15d) or range-bound</li>
+<li><strong>Logic:</strong> Sell call above expected move; keep premium if stock stays below strike</li>
+<li><strong>Caution:</strong> Avoid after sharp rallies (> 8% in 15d)</li>
+
+<h4>Iron Condor</h4>
+<li><strong>When:</strong> Neutral mode + 15d movement < 4% and 30d < 8%</li>
+<li><strong>Structure:</strong> Sell OTM call + buy further call + sell OTM put + buy further put</li>
+<li><strong>Legs placed at:</strong> ±1× and ±1.5× expected move from spot</li>
+
+<h4>Bull Call Spread</h4>
+<li><strong>When:</strong> Uptrend + directional buying + top call strike identified</li>
+<li><strong>Structure:</strong> Buy lower strike CE, sell higher strike CE</li>
+<li><strong>Advantage:</strong> Defined max loss vs naked call</li>
+
+<h4>Bear Put Spread</h4>
+<li><strong>When:</strong> Downtrend + put buying</li>
+<li><strong>Structure:</strong> Buy higher strike PE, sell lower strike PE</li>
+
+<h3>Options strike selection gates</h3>
+
+<strong>For selling (live chain):</strong>
+<li>P(OTM) ≥ 70%</li>
+<li>Strike distance ≥ 0.8 × expected move</li>
+<li>OI > 500 OR volume > 100</li>
+<li>IV > HV × 1.1 adds to score</li>
+
+<strong>For buying:</strong>
+<li>Composite score ≥ 65</li>
+<li>Suitability ≠ Avoid</li>
+<li>Liquidity check when chain available</li>
+
+<blockquote><strong>Important:</strong> When live NSE chain is unavailable, the engine uses <strong>synthetic HV-based estimates</strong>. These are marked in the API but should <strong>never be traded without broker verification</strong>.</blockquote>
+
+<hr>
+
+<h2>9. Futures Strategies</h2>
+
+<strong>Engine:</strong> <code>lib/engines/futures.ts</code>
+
+<blockquote><strong>Note:</strong> The futures module analyzes <strong>cash/index price history</strong> with futures-style rules. It does not fetch NSE FUT contracts, OI, or basis. Use for <strong>directional ideas</strong> on Nifty/BankNifty — not contract-level execution.</blockquote>
+
+<h3>Strategy modes</h3>
+
+<h4>Trend Following</h4>
+<li><strong>Long:</strong> Uptrend + volume ≥ 1.3× + RSI 50–65</li>
+<li><strong>Short:</strong> Downtrend + volume ≥ 1.3× + RSI 35–50</li>
+<li><strong>Stop:</strong> Support/resistance ± 0.3 ATR</li>
+<li><strong>Target:</strong> 2× risk distance</li>
+
+<h4>Breakout</h4>
+<li><strong>Long:</strong> Range compression + price breaks above resistance + volume > 1.2×</li>
+<li><strong>Short:</strong> Range compression + breakdown below support + volume > 1.2×</li>
+<li><strong>Stop:</strong> Beyond broken level ± 0.5 ATR</li>
+<li><strong>Target:</strong> Width of prior range</li>
+
+<h4>Pullback</h4>
+<li><strong>Long:</strong> Uptrend + price within 3% of 20-SMA + RSI 40–60</li>
+<li><strong>Short:</strong> Downtrend + bounce to 20-SMA + RSI 40–60</li>
+<li><strong>Stop:</strong> 20-SMA ± 0.8 ATR</li>
+<li><strong>Target:</strong> Resistance (long) or support (short)</li>
+
+<h4>Mean Reversion</h4>
+<li><strong>Long:</strong> Price ≥ 1.5 ATR below 20-SMA + RSI < 35</li>
+<li><strong>Short:</strong> Price ≥ 1.5 ATR above 20-SMA + RSI > 65</li>
+<li><strong>Target:</strong> 20-SMA (reversion to mean)</li>
+
+<h4>Volatility Expansion</h4>
+<li><strong>Long/Short:</strong> Range compressed for 12 bars, then current bar range > 1.2× ATR with volume > 1.3×</li>
+<li>Direction follows the expansion candle (close vs open)</li>
+
+<strong>Universal R:R floor:</strong> 1.5 — signals below this downgrade to Watch.
+
+<hr>
+
+<h2>10. Universe Scans & Ranking</h2>
+
+<h3>Equity scan (<code>/api/equity/scan</code>)</h3>
+
+<strong>Engine:</strong> <code>lib/engines/equity.ts</code> → <code>scanUniverse</code>
+
+<tr><td>Parameter</td><td>Options</td><td>Effect</td></tr>
+<tr><td>-----------</td><td>---------</td><td>--------</td></tr>
+<tr><td><code>universe</code></td><td>nifty50, midcap, banknifty, custom</td><td>Stock pool</td></tr>
+<tr><td><code>sector</code></td><td>IT, Banking, Pharma, etc.</td><td>Filter by sector</td></tr>
+<tr><td><code>signal</code></td><td>Buy, Watch, Avoid, All</td><td>Filter by signal</td></tr>
+<tr><td><code>limit</code></td><td>10–50</td><td>Max results returned</td></tr>
+
+<strong>Scan process:</strong>
+1. Fetch Nifty bars once (shared across symbols)
+2. Analyze each symbol in parallel (6 concurrent workers)
+3. Apply filters (signal, risk level, valuation bracket)
+4. Sort by <code>final_score</code> descending
+5. Return top N
+
+<strong>How to leverage:</strong>
+<li><strong>Daily Buy scan</strong> → your watchlist for the week</li>
+<li><strong>Sector scan</strong> → rotate into leading sectors in risk-on regimes</li>
+<li><strong>Watch scan</strong> → names approaching Buy gates (setup forming)</li>
+
+<h3>Options scan (<code>/api/options/scan</code>)</h3>
+
+<strong>Engine:</strong> <code>lib/engines/options.ts</code> → <code>scanOptionsUniverse</code>
+
+Ranks top 30 Nifty 50 names by:
+<li>Price movement fit for selected strategy mode</li>
+<li>Historical volatility</li>
+<li>Trend alignment</li>
+<li>Suitability score (favorable names rank higher)</li>
+
+<strong>Does not fetch live option chains</strong> — use scan for <strong>stock selection</strong>, then run full analyze for strikes.
+
+<h3>Risk dashboard (<code>/dashboard</code>)</h3>
+
+Aggregates full Nifty 50 scan:
+<li>Buy / Watch / Avoid counts</li>
+<li>Average score</li>
+<li>Top 5 opportunities</li>
+<li>Index regime summary</li>
+
+<strong>Best use:</strong> Single-screen market temperature before diving into individual names.
+
+<hr>
+
+<h2>11. Data Quality & When to Trust Signals</h2>
+
+<strong>Engine:</strong> <code>lib/data/agents/orchestrator.ts</code>, <code>consensus.ts</code>
+
+<h3>Data sources (priority order)</h3>
+
+1. <strong>Yahoo Finance</strong> (primary OHLC)
+2. <strong>NSE India</strong> (stock-nse-india — quotes, option chains)
+3. <strong>Yahoo HTTP / Python fallbacks</strong>
+4. <strong>Community Indian Market API</strong>
+
+<h3>Quality indicators (shown in Data Intel panel)</h3>
+
+<tr><td>Indicator</td><td>Good</td><td>Caution</td></tr>
+<tr><td>-----------</td><td>------</td><td>---------</td></tr>
+<tr><td>Accuracy score</td><td>≥ 80</td><td>< 70</td></tr>
+<tr><td>Price spread</td><td>< 1.5% across sources</td><td>> 2.5%</td></tr>
+<tr><td>Bar count</td><td>≥ 120 daily bars</td><td>< 60 bars</td></tr>
+<tr><td>Live chain</td><td>✓ for options</td><td>Synthetic estimates</td></tr>
+<tr><td>Fundamentals</td><td>Complete</td><td>Missing P/E or sector</td></tr>
+
+<h3>Rules of thumb</h3>
+
+1. <strong>Trust equity Buys</strong> when accuracy ≥ 75, bar count ≥ 120, spread < 2%
+2. <strong>Trust options strikes</strong> only when <code>chain_available: true</code>
+3. <strong>Verify on broker</strong> before any F&O order — Greeks are BS estimates, not broker margin calcs
+4. <strong>Skip mid/small caps</strong> if bar count is low or sources disagree
+5. <strong>Connect Supabase</strong> for incremental storage — reduces re-fetch errors and improves history depth
+
+<hr>
+
+<h2>12. Quick Reference Tables</h2>
+
+<h3>Equity Buy checklist</h3>
+
+<li class="check">Nifty regime = Risk-on or Neutral (above EMA50)</li>
+<li class="check">Signal = Buy or Strong Buy</li>
+<li class="check">Technical score ≥ 65</li>
+<li class="check">Fundamental score ≥ 55</li>
+<li class="check">R:R ≥ 1.8</li>
+<li class="check">RS vs Nifty ≥ 1.0</li>
+<li class="check">Volume ≥ 1.2× (or confirmed setup)</li>
+<li class="check">RSI ≤ 70</li>
+<li class="check">Trend ≠ downtrend</li>
+<li class="check">Active setup matches trade mode</li>
+<li class="check">Data accuracy ≥ 75</li>
+
+<h3>Options seller checklist</h3>
+
+<li class="check">Strategy mode = Selling or Neutral</li>
+<li class="check">Suitability = Favorable</li>
+<li class="check">Live NSE chain available</li>
+<li class="check">P(OTM) ≥ 70% on selected strike</li>
+<li class="check">IV/HV ratio > 1.0 (prefer > 1.1)</li>
+<li class="check">15d movement not strongly against you</li>
+<li class="check">Theta income acceptable for DTE remaining</li>
+<li class="check">No major earnings/event before expiry</li>
+
+<h3>Options buyer checklist</h3>
+
+<li class="check">Clear trend matching option type (call = uptrend, put = downtrend)</li>
+<li class="check">Suitability = Favorable</li>
+<li class="check">IV/HV < 1.2 (not overpaying for vol)</li>
+<li class="check">Momentum confirmed on 7d and 15d windows</li>
+<li class="check">Stop loss defined (~50% of premium)</li>
+<li class="check">DTE sufficient for move to develop (prefer > 14 DTE)</li>
+
+<h3>Strategy → Market condition map</h3>
+
+<tr><td>Market condition</td><td>Best equity strategy</td><td>Best options strategy</td><td>Best futures strategy</td></tr>
+<tr><td>-----------------</td><td>---------------------</td><td>----------------------</td><td>----------------------</td></tr>
+<tr><td>Risk-on + trending</td><td>MVRB momentum, ADX/EMA trend</td><td>Buy calls / bull spreads</td><td>Trend following</td></tr>
+<tr><td>Risk-on + consolidating</td><td>OBV accumulation, volume breakout</td><td>Sell puts (CSP)</td><td>Breakout (await trigger)</td></tr>
+<tr><td>Neutral + range-bound</td><td>Watchlist / small positions</td><td>Iron condor, sell OTM</td><td>Mean reversion</td></tr>
+<tr><td>Risk-off</td><td><strong>No new longs</strong></td><td>Avoid naked selling</td><td>Avoid or short only</td></tr>
+<tr><td>High volatility spike</td><td>Wait for base</td><td>Sell premium if IV > HV</td><td>Volatility expansion</td></tr>
+<tr><td>Post-rally pause</td><td>Watch for pullback entry</td><td>Sell OTM calls</td><td>Pullback long</td></tr>
+
+<hr>
+
+<h2>Appendix: Key Files</h2>
+
+<tr><td>Module</td><td>File</td></tr>
+<tr><td>--------</td><td>------</td></tr>
+<tr><td>Equity analysis</td><td><code>lib/engines/equity.ts</code></td></tr>
+<tr><td>Technical + setups</td><td><code>lib/engines/technical.ts</code></td></tr>
+<tr><td>Strategy confluence</td><td><code>lib/engines/strategies.ts</code></td></tr>
+<tr><td>Fundamentals + Buy logic</td><td><code>lib/engines/fundamental.ts</code></td></tr>
+<tr><td>Regime gate</td><td><code>lib/engines/regime.ts</code></td></tr>
+<tr><td>Trade modes + exits</td><td><code>lib/engines/trade-mode.ts</code></td></tr>
+<tr><td>Options + Greeks</td><td><code>lib/engines/options.ts</code>, <code>lib/engines/greeks.ts</code></td></tr>
+<tr><td>Futures</td><td><code>lib/engines/futures.ts</code></td></tr>
+<tr><td>Strategy descriptions</td><td><code>lib/engines/intel.ts</code></td></tr>
+<tr><td>Data orchestration</td><td><code>lib/data/agents/orchestrator.ts</code></td></tr>
+
+<hr>
+
+<em>Last updated: July 2026 — reflects engine logic in the main TypeScript codebase.</em>
+
+<p style="margin-top:3rem;font-size:0.85rem;color:#666;">Generated from docs/STRATEGIES.md — Money Dashboard</p>
+</body>
+</html>
