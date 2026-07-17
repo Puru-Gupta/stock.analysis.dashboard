@@ -12,3 +12,7 @@ backend/app/__pycache__/
 .vercel
 .playwright-cli/
 docs/*.html
+docs/~$*
+cache/
+*.tsbuildinfo
+backend/cache/
