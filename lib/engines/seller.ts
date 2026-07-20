@@ -1,9 +1,10 @@
 import { fetchLiveMarketBundle } from "@/lib/data/agents/orchestrator";
-import { normalizeSymbol } from "@/lib/data/universes";
+import { getPriceHistory } from "@/lib/data/sync";
+import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import type { AgentOptionLeg } from "@/lib/data/agents/types";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
-import { historicalVol, normalizeIv, atmIvFromLegs, probAbove } from "./options";
+import { historicalVol, normalizeIv, atmIvFromLegs, probAbove, computePriceMovement, mapPool } from "./options";
 
 /**
  * Option Selling Assistant engine.
@@ -410,4 +411,88 @@ export async function analyzeSellerBoard(symbol: string) {
     data_quality: live.quality,
     analyzed_at: new Date().toISOString(),
   };
+}
+
+export interface SellerPick {
+  symbol: string;
+  name: string;
+  spot: number;
+  score: number;
+  trend_word: TrendWord;
+  days_15: number;
+  hv: number;
+  event_risk: "low" | "elevated";
+  reason: string;
+}
+
+/**
+ * Rank liquid F&O names by how sell-ready the underlying looks right now:
+ * sideways tape, quiet recent movement, enough volatility to be paid for,
+ * and no event-risk signature. Uses cached price history only — no chains.
+ */
+export async function scanSellerUniverse(limit = 12): Promise<SellerPick[]> {
+  const universe = NIFTY_50.slice(0, 30);
+
+  const results = await mapPool(universe, 6, async (sym) => {
+    try {
+      const { bars } = await getPriceHistory(sym, 120);
+      if (bars.length < 40) return null;
+      const spot = bars.at(-1)!.close;
+      const hv = historicalVol(bars);
+      const hvPct = hv * 100;
+      const trendWord = trendToWord(detectTrend(bars), hv);
+      const movement = computePriceMovement(bars);
+      const { risk: eventRisk } = detectEventRisk(bars, hv);
+
+      let score = 0;
+      const why: string[] = [];
+      const m15abs = Math.abs(movement.days_15);
+      if (trendWord === "Sideways") {
+        // A big 15d swing contradicts "range-bound" — trim the bonus
+        score += m15abs < 8 ? 35 : 15;
+        why.push("range-bound");
+      } else if (trendWord === "Highly Volatile") {
+        why.push("too volatile for sellers");
+      } else {
+        score += 12;
+        why.push(`${trendWord.toLowerCase()} trend`);
+      }
+      if (m15abs < 3) {
+        score += 20;
+        why.push("quiet last 15 days");
+      } else if (m15abs < 5) {
+        score += 12;
+      } else {
+        why.push(`moved ${movement.days_15}% in 15d`);
+      }
+      if (Math.abs(movement.days_30) < 6) score += 10;
+      if (hvPct >= 18 && hvPct <= 40) {
+        score += 20;
+        why.push("healthy premium on offer");
+      } else if (hvPct >= 12) {
+        score += 10;
+      } else {
+        why.push("thin premiums");
+      }
+      if (eventRisk === "low") score += 15;
+      else why.push("possible event risk");
+
+      const reason = why.join(", ");
+      return {
+        symbol: sym,
+        name: sym.replace(".NS", ""),
+        spot: r2(spot),
+        score,
+        trend_word: trendWord,
+        days_15: movement.days_15,
+        hv: r1(hvPct),
+        event_risk: eventRisk,
+        reason: reason.charAt(0).toUpperCase() + reason.slice(1),
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }

@@ -273,6 +273,18 @@ export interface SellerBoard {
   analyzed_at: string;
 }
 
+export interface SellerPick {
+  symbol: string;
+  name: string;
+  spot: number;
+  score: number;
+  trend_word: "Sideways" | "Bullish" | "Bearish" | "Highly Volatile";
+  days_15: number;
+  hv: number;
+  event_risk: "low" | "elevated";
+  reason: string;
+}
+
 export interface OptionsStockPick {
   symbol: string;
   name: string;

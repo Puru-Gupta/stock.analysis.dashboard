@@ -532,7 +532,7 @@ function roundStrike(price: number, step: number) {
   return Math.round(price / step) * step;
 }
 
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R | null>): Promise<R[]> {
+export async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R | null>): Promise<R[]> {
   const out: (R | null)[] = new Array(items.length);
   let next = 0;
   async function worker() {

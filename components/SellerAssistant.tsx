@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAPI, SellerBoard, SellerContract } from "@/lib/api";
+import { fetchAPI, SellerBoard, SellerContract, SellerPick } from "@/lib/api";
 import { LoadingSpinner, ErrorMessage } from "@/components/Sidebar";
 import { Search, Sparkles, X, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppCache } from "@/components/AppCacheProvider";
@@ -12,6 +12,8 @@ type SellerCache = {
   symbol: string;
   typeFilter: string;
   board: SellerBoard | null;
+  picks?: SellerPick[];
+  picksLoaded?: boolean;
 };
 
 function isMarketOpenIST() {
@@ -342,12 +344,17 @@ export default function SellerAssistant() {
   const [symbol, setSymbol] = useState(cached?.symbol ?? "NIFTY");
   const [typeFilter, setTypeFilter] = useState(cached?.typeFilter ?? "all");
   const [board, setBoard] = useState<SellerBoard | null>(cached?.board ?? null);
+  const [picks, setPicks] = useState<SellerPick[]>(cached?.picks ?? []);
+  const [picksLoaded, setPicksLoaded] = useState(cached?.picksLoaded ?? false);
+  const [picksLoading, setPicksLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<SellerContract | null>(null);
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
+  const picksRef = useRef({ picks, picksLoaded });
+  picksRef.current = { picks, picksLoaded };
 
   const analyze = useCallback(
     async (silent = false) => {
@@ -365,7 +372,13 @@ export default function SellerAssistant() {
           return;
         }
         setBoard(data);
-        cache.set(CACHE_KEY, { symbol: symbolRef.current, typeFilter, board: data });
+        cache.set(CACHE_KEY, {
+          symbol: symbolRef.current,
+          typeFilter,
+          board: data,
+          picks: picksRef.current.picks,
+          picksLoaded: picksRef.current.picksLoaded,
+        });
         // Keep the open panel in sync after a live refresh
         setSelected((prev) =>
           prev ? data.contracts.find((c) => c.type === prev.type && c.strike === prev.strike) ?? prev : prev,
@@ -391,6 +404,45 @@ export default function SellerAssistant() {
     }, 120000);
     return () => clearInterval(id);
   }, [board, analyze]);
+
+  const loadPicks = useCallback(async () => {
+    setPicksLoading(true);
+    try {
+      const data = await fetchAPI<SellerPick[]>("/api/options/seller/scan?limit=12");
+      setPicks(data);
+      setPicksLoaded(true);
+      const saved = cache.get<SellerCache>(CACHE_KEY);
+      cache.set(CACHE_KEY, {
+        symbol: symbolRef.current,
+        typeFilter,
+        board: saved?.board ?? null,
+        picks: data,
+        picksLoaded: true,
+      });
+    } catch {
+      setPicks([]);
+      setPicksLoaded(true);
+    } finally {
+      setPicksLoading(false);
+    }
+  }, [cache, typeFilter]);
+
+  // Load suggestions once on first open
+  const picksAutoloaded = useRef(false);
+  useEffect(() => {
+    if (picksAutoloaded.current || picksLoaded) return;
+    picksAutoloaded.current = true;
+    loadPicks();
+  }, [picksLoaded, loadPicks]);
+
+  const analyzeSymbol = useCallback(
+    (sym: string) => {
+      setSymbol(sym);
+      symbolRef.current = sym;
+      analyze();
+    },
+    [analyze],
+  );
 
   const contracts = (board?.contracts ?? []).filter(
     (c) => typeFilter === "all" || c.type === (typeFilter === "call" ? "CE" : "PE"),
@@ -444,13 +496,74 @@ export default function SellerAssistant() {
         </div>
       </div>
 
+      {/* Suggested stocks to explore for option selling */}
+      <div className="card">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
+              Suggested Stocks for Option Selling
+            </h3>
+            <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
+              Liquid F&amp;O names ranked by sell-readiness — click one to score its option chain
+            </p>
+          </div>
+          <button
+            onClick={loadPicks}
+            className="btn-secondary flex items-center gap-2 text-xs shrink-0"
+            disabled={picksLoading}
+          >
+            <RefreshCw className={`h-3 w-3 ${picksLoading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
+        {picksLoading ? (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+            Scanning NIFTY 50 liquid names for range-bound, seller-friendly setups...
+          </p>
+        ) : picks.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+            {picksLoaded ? "No seller-friendly stocks found right now." : "Click Refresh to scan for seller-friendly stocks."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Stock</th>
+                  <th>Sell-Readiness</th>
+                  <th>Trend</th>
+                  <th>15d Move</th>
+                  <th>HV</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {picks.map((p) => (
+                  <tr key={p.symbol} onClick={() => analyzeSymbol(p.symbol)} className="cursor-pointer">
+                    <td className="font-medium">{p.name}</td>
+                    <td className="font-mono tabular-nums" style={{ color: p.score >= 80 ? "var(--green)" : p.score >= 60 ? "var(--accent)" : "var(--fg-tertiary)" }}>
+                      {p.score}
+                    </td>
+                    <td className="text-xs" style={{ color: trendColor(p.trend_word) }}>{p.trend_word}</td>
+                    <td className="font-mono text-xs tabular-nums" style={{ color: Math.abs(p.days_15) < 3 ? "var(--green)" : "var(--fg-tertiary)" }}>
+                      {p.days_15 > 0 ? "+" : ""}{p.days_15}%
+                    </td>
+                    <td className="font-mono text-xs tabular-nums">{p.hv}%</td>
+                    <td className="max-w-[240px] truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{p.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {loading && <LoadingSpinner />}
       {error && <ErrorMessage message={error} />}
 
       {!board && !loading && !error && (
         <div className="card text-center">
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
-            Enter an underlying and click <strong>Analyze</strong>. Every contract gets a{" "}
+            Pick a suggested stock above, or enter any underlying and click <strong>Analyze</strong>. Every contract gets a{" "}
             <strong>Seller Score</strong> answering one question: should I sell this option right now?
           </p>
         </div>
