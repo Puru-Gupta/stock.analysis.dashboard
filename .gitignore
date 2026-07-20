@@ -16,3 +16,4 @@ docs/~$*
 cache/
 *.tsbuildinfo
 backend/cache/
+.claude/

@@ -215,6 +215,64 @@ export interface OptionsAnalysis {
   };
 }
 
+export interface SellerContract {
+  type: "CE" | "PE";
+  strike: number;
+  expiry: string;
+  premium: number;
+  fair_premium: number;
+  premium_edge: number;
+  premium_edge_ok: boolean;
+  pop: number;
+  seller_score: number;
+  rating: "strong_sell" | "good_sell" | "watch" | "avoid";
+  rating_label: string;
+  premium_quality: "overpriced" | "fair" | "cheap";
+  dist_em: number;
+  outside_em: boolean;
+  risk: { level: "low" | "medium" | "high"; reasons: string[] };
+  decision: "sell" | "avoid";
+  recommendation: string;
+  advanced: {
+    delta: number;
+    gamma: number;
+    theta: number;
+    vega: number;
+    iv: number;
+    oi: number;
+    oi_change: number;
+    volume: number;
+    bid_ask_spread_pct: number | null;
+  };
+  live: boolean;
+}
+
+export interface SellerBoard {
+  symbol: string;
+  spot: number;
+  expiry: string;
+  days_to_expiry: number;
+  trend_word: "Sideways" | "Bullish" | "Bearish" | "Highly Volatile";
+  hv: number;
+  atm_iv: number;
+  iv_rank: number;
+  iv_percentile: number;
+  iv_hv_ratio: number;
+  expected_move: number;
+  expected_range: [number, number];
+  event_risk: "low" | "elevated";
+  event_note: string;
+  pcr: number | null;
+  max_pain: number | null;
+  chain_available: boolean;
+  note?: string;
+  error?: string;
+  contracts: SellerContract[];
+  smile: { strike: number; ce_iv: number | null; pe_iv: number | null }[];
+  data_quality?: DataQuality;
+  analyzed_at: string;
+}
+
 export interface OptionsStockPick {
   symbol: string;
   name: string;

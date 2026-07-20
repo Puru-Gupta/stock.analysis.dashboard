@@ -47,7 +47,7 @@ export function computePriceMovement(bars: { close: number }[]): PriceMovement {
   };
 }
 
-function historicalVol(bars: { close: number }[], window = 20) {
+export function historicalVol(bars: { close: number }[], window = 20) {
   if (bars.length < window + 1) return 0.25;
   const rets: number[] = [];
   for (let i = 1; i < bars.length; i++) rets.push((bars[i].close - bars[i - 1].close) / bars[i - 1].close);
@@ -57,7 +57,7 @@ function historicalVol(bars: { close: number }[], window = 20) {
   return Math.sqrt(variance) * Math.sqrt(252);
 }
 
-function normalizeIv(raw: number | undefined, hv: number) {
+export function normalizeIv(raw: number | undefined, hv: number) {
   if (!raw || raw <= 0) return hv;
   return raw > 1 ? raw / 100 : raw;
 }
@@ -83,7 +83,7 @@ function computeVolatilityMetrics(bars: { close: number }[], atmIv?: number) {
   };
 }
 
-function atmIvFromLegs(
+export function atmIvFromLegs(
   legs: { strike: number; iv?: number; type: string }[],
   spot: number,
   hv: number,
@@ -124,7 +124,7 @@ function normCdf(x: number) {
   return x > 0 ? 1 - p : p;
 }
 
-function probAbove(spot: number, strike: number, vol: number, days: number) {
+export function probAbove(spot: number, strike: number, vol: number, days: number) {
   if (vol <= 0 || days <= 0) return 50;
   const t = days / 365;
   const d2 = (Math.log(spot / strike) + (-0.5 * vol ** 2) * t) / (vol * Math.sqrt(t));

@@ -12,9 +12,11 @@ import {
 } from "@/components/Sidebar";
 import { Search, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
 import DataIntelPanel from "@/components/DataIntelPanel";
+import SellerAssistant from "@/components/SellerAssistant";
 import { useAppCache } from "@/components/AppCacheProvider";
 
 const CACHE_KEY = "options";
+const SUBTAB_CACHE_KEY = "options_subtab";
 
 type OptionsCache = {
   symbol: string;
@@ -126,6 +128,7 @@ function SuitabilityBadge({ s }: { s: string }) {
 export default function OptionsPage() {
   const cache = useAppCache();
   const cached = cache.get<OptionsCache>(CACHE_KEY);
+  const [subTab, setSubTab] = useState(cache.get<string>(SUBTAB_CACHE_KEY) ?? "analysis");
   const [symbol, setSymbol] = useState(cached?.symbol ?? "RELIANCE.NS");
   const [optionType, setOptionType] = useState(cached?.optionType ?? "call");
   const [strategyMode, setStrategyMode] = useState(cached?.strategyMode ?? "selling");
@@ -214,13 +217,42 @@ export default function OptionsPage() {
         <div>
           <h1 className="page-title">Options Analysis</h1>
           <p className="page-subtitle">
-            Price movement context + probability-based strike selection
+            {subTab === "seller"
+              ? "Should I sell this option right now? One score, one answer."
+              : "Price movement context + probability-based strike selection"}
           </p>
         </div>
       </div>
 
+      <div className="pill-group" role="tablist" aria-label="Options view">
+        {(
+          [
+            { value: "analysis", label: "Analysis" },
+            { value: "seller", label: "Selling Assistant" },
+          ] as const
+        ).map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={subTab === value}
+            onClick={() => {
+              setSubTab(value);
+              cache.set(SUBTAB_CACHE_KEY, value);
+            }}
+            className={`pill ${subTab === value ? "pill-active" : ""}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <Disclaimer />
 
+      {subTab === "seller" && <SellerAssistant />}
+
+      {subTab === "analysis" && (
+      <>
       <div className="product-panel">
         <div className="product-section">
           <p className="product-label">Underlying</p>
@@ -665,6 +697,8 @@ export default function OptionsPage() {
             )}
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
