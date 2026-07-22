@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { fetchAPI, OptionsAnalysis, OptionStatsPick } from "@/lib/api";
 import {
   SignalBadge,
@@ -41,6 +41,7 @@ function SuitabilityBadge({ s }: { s: string }) {
 
 export default function OptionsPage() {
   const cache = useAppCache();
+  const cacheSet = cache.set;
   const cached = cache.get<OptionsCache>(CACHE_KEY);
   const [subTab, setSubTab] = useState(cache.get<string>(SUBTAB_CACHE_KEY) ?? "analysis");
   const [symbol, setSymbol] = useState(cached?.symbol ?? "RELIANCE.NS");
@@ -55,38 +56,46 @@ export default function OptionsPage() {
   const [error, setError] = useState("");
   const [statsPicksLoaded, setStatsPicksLoaded] = useState(cached?.statsPicksLoaded ?? false);
 
+  const snapshotRef = useRef({
+    symbol,
+    optionType,
+    strategyMode,
+    capital,
+    riskLevel,
+    analysis,
+    statsPicks,
+    statsPicksLoaded,
+  });
+  snapshotRef.current = {
+    symbol,
+    optionType,
+    strategyMode,
+    capital,
+    riskLevel,
+    analysis,
+    statsPicks,
+    statsPicksLoaded,
+  };
+
   const persist = useCallback(
     (patch: Partial<OptionsCache>) => {
-      cache.set(CACHE_KEY, {
-        symbol,
-        optionType,
-        strategyMode,
-        capital,
-        riskLevel,
-        analysis,
-        statsPicks,
-        statsPicksLoaded,
-        analysisLoaded: !!analysis,
+      cacheSet(CACHE_KEY, {
+        ...snapshotRef.current,
+        analysisLoaded: !!snapshotRef.current.analysis,
         ...patch,
       });
     },
-    [cache, symbol, optionType, strategyMode, capital, riskLevel, analysis, statsPicks, statsPicksLoaded],
+    [cacheSet],
   );
 
-  useEffect(() => {
-    const saved = cache.get<OptionsCache>(CACHE_KEY);
-    if (!saved) return;
-    setSymbol(saved.symbol);
-    setOptionType(saved.optionType);
-    setStrategyMode(saved.strategyMode);
-    setCapital(saved.capital);
-    setRiskLevel(saved.riskLevel);
-    setAnalysis(saved.analysis);
-    setStatsPicks(saved.statsPicks ?? []);
-    setStatsPicksLoaded(saved.statsPicksLoaded ?? false);
-  }, [cache]);
+  const statsScanningRef = useRef(false);
+  const scannedOptionTypeRef = useRef<string | null>(
+    cached?.statsPicksLoaded && (cached.statsPicks?.length ?? 0) > 0 ? cached.optionType ?? null : null,
+  );
 
   const loadStatsPicks = useCallback(async () => {
+    if (statsScanningRef.current) return;
+    statsScanningRef.current = true;
     setStatsPicksLoading(true);
     try {
       const data = await fetchAPI<OptionStatsPick[]>(
@@ -94,16 +103,20 @@ export default function OptionsPage() {
       );
       setStatsPicks(data);
       setStatsPicksLoaded(true);
+      scannedOptionTypeRef.current = optionType;
       persist({ statsPicks: data, statsPicksLoaded: true, optionType });
     } catch {
       setStatsPicks([]);
     } finally {
       setStatsPicksLoading(false);
+      statsScanningRef.current = false;
     }
   }, [optionType, persist]);
 
   useEffect(() => {
     if (subTab !== "analysis") return;
+    if (scannedOptionTypeRef.current === optionType) return;
+    scannedOptionTypeRef.current = optionType;
     loadStatsPicks();
   }, [subTab, optionType, loadStatsPicks]);
 
@@ -289,7 +302,13 @@ export default function OptionsPage() {
               <strong>Option Score</strong> = best candidate today for {optionType === "call" ? "call" : "put"} selling.
             </p>
           </div>
-          <button onClick={loadStatsPicks} className="btn-secondary flex items-center gap-2 text-xs shrink-0">
+          <button
+            onClick={() => {
+              scannedOptionTypeRef.current = null;
+              loadStatsPicks();
+            }}
+            className="btn-secondary flex items-center gap-2 text-xs shrink-0"
+          >
             <RefreshCw className={`h-3 w-3 ${statsPicksLoading ? "animate-spin" : ""}`} /> Rescan
           </button>
         </div>
