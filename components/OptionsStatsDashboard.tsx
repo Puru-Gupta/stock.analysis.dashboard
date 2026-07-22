@@ -205,10 +205,24 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
           <p className="mt-1 text-xs" style={{ color: "var(--fg-secondary)" }}>
             HV 20d {volatility.hv_20}% · 60d {volatility.hv_60}% · 120d {volatility.hv_120}% · {volatility.iv_trend_label}
           </p>
+          {volatility.seller_notes.length > 0 && (
+            <ul className="mt-2 space-y-0.5">
+              {volatility.seller_notes.map((note) => (
+                <li key={note} className="text-xs" style={{ color: "var(--amber)" }}>
+                  • {note}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <p className="text-xl tracking-widest" style={{ color: "var(--amber)" }}>
-          {volatility.seller_stars}
-        </p>
+        <div className="text-right">
+          <p className="text-xl tracking-widest" style={{ color: "var(--amber)" }}>
+            {volatility.seller_stars}
+          </p>
+          <p className="mt-1 font-mono text-[0.625rem] tabular-nums" style={{ color: "var(--fg-muted)" }}>
+            Score {volatility.seller_favorability}/100
+          </p>
+        </div>
       </div>
 
       {/* Middle: comparison + expected move + mean reversion */}

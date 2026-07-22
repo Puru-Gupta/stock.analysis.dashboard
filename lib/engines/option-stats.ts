@@ -80,6 +80,7 @@ export interface VolatilityDashboard {
   seller_favorability: number;
   seller_label: string;
   seller_stars: string;
+  seller_notes: string[];
   iv_above_hv: boolean;
 }
 
@@ -419,20 +420,42 @@ export function computeOptionStats(input: {
   const sellerFavor =
     (iv >= hv20 ? 35 : 10) + clamp01(ivRank / 100) * 35 + clamp01((iv / hv20 - 0.9) / 0.4) * 30;
   const sellerStars = starsFromScore(sellerFavor);
+  const ivHvRatio = hv20 > 0 ? iv / hv20 : 1;
+
+  const sellerNotes: string[] = [];
+  if (iv >= hv20 && ivHvRatio < 1.1) sellerNotes.push("IV is only slightly above HV — modest premium edge");
+  if (ivRank < 40) sellerNotes.push(`IV rank ${ivRank}% is low vs the past year — premiums not historically rich`);
+  if (ivTrend === "falling") sellerNotes.push("Vol is contracting — option prices may compress further");
+  if (Math.abs(primary?.z_score ?? 0) >= 1.5) {
+    const z = primary!.z_score;
+    sellerNotes.push(`Price is ${z > 0 ? "+" : ""}${z}σ from mean — elevated directional risk for CE sellers`);
+  }
+
+  const sellerLabel =
+    sellerFavor >= 75
+      ? "GOOD FOR OPTION SELLERS"
+      : sellerFavor >= 55
+        ? "Favorable for sellers"
+        : sellerFavor >= 40
+          ? "Mild seller edge — pick strikes carefully"
+          : iv >= hv20
+            ? "IV above HV only — weak overall seller setup"
+            : "Caution for sellers";
 
   const volatility: VolatilityDashboard = {
     hv_20: r1(hv20 * 100),
     hv_60: r1(hv60 * 100),
     hv_120: r1(hv120 * 100),
     implied_vol: r1(iv * 100),
-    iv_hv_ratio: hv20 > 0 ? r1(iv / hv20) : 1,
+    iv_hv_ratio: r1(ivHvRatio),
     iv_rank: ivRank,
     iv_percentile: ivPct,
     iv_trend: ivTrend,
     iv_trend_label: ivTrendLabel,
     seller_favorability: Math.round(sellerFavor),
-    seller_label: iv >= hv20 && ivRank >= 50 ? "GOOD FOR OPTION SELLERS" : iv >= hv20 ? "Favorable for sellers" : "Caution for sellers",
+    seller_label: sellerLabel,
     seller_stars: sellerStars,
+    seller_notes: sellerNotes,
     iv_above_hv: iv >= hv20,
   };
 
