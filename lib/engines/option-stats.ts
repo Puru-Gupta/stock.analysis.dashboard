@@ -1,6 +1,7 @@
 import type { OHLCVBar } from "@/lib/data/types";
 import { computeAtr } from "./technical";
 import { probAbove, historicalVol, normalizeIv } from "./options";
+import { assessStockFocus, type StockFocusAssessment } from "./stock-focus";
 import {
   clamp01,
   distributionConfidence,
@@ -137,6 +138,7 @@ export interface OptionStatsBundle {
   health: StatisticalHealth;
   recommendation: SellerRecommendation;
   alerts: SmartAlert[];
+  focus: StockFocusAssessment;
 }
 
 function ivRankFromHvSeries(bars: OHLCVBar[], currentIv: number) {
@@ -538,6 +540,13 @@ export function computeOptionStats(input: {
     hvChange7: hvChg7,
   });
 
+  const focus = assessStockFocus({
+    bars,
+    hv: hv20,
+    zScore1m: z1m,
+    volRegime: volatility_regime,
+  });
+
   return {
     distributions,
     comparison,
@@ -551,5 +560,6 @@ export function computeOptionStats(input: {
     health,
     recommendation,
     alerts,
+    focus,
   };
 }

@@ -163,11 +163,33 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
   const stats = analysis.stats;
   if (!stats) return null;
 
-  const { volatility, health, recommendation, alerts, mean_reversion, confidence } = stats;
+  const { volatility, health, recommendation, alerts, mean_reversion, confidence, focus } = stats;
   const riskColor = recommendation.risk === "Low" ? "green" : recommendation.risk === "Medium" ? "yellow" : "red";
 
   return (
     <div className="page-stack">
+      {focus && focus.status !== "clean" && (
+        <div
+          className="card"
+          style={{
+            borderColor: focus.status === "avoid" ? "rgba(220,38,38,0.35)" : "rgba(201,162,39,0.35)",
+            background: focus.status === "avoid" ? "var(--red-muted)" : "var(--amber-muted)",
+          }}
+        >
+          <p className="text-sm font-medium" style={{ color: focus.status === "avoid" ? "var(--red)" : "var(--amber)" }}>
+            Focus: {focus.label}
+            {focus.tags.length > 0 && (
+              <span className="ml-2 font-normal text-xs" style={{ color: "var(--fg-secondary)" }}>
+                {focus.tags.join(" · ")}
+              </span>
+            )}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--fg-secondary)" }}>
+            {focus.note}
+          </p>
+        </div>
+      )}
+
       {/* Top row */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <TopStat label="Spot" value={`₹${analysis.spot}`} sub={`${analysis.days_to_expiry} DTE`} accent="var(--accent)" />

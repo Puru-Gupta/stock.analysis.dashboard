@@ -314,6 +314,11 @@ export interface OptionStatsPick {
   z_score_1m: number;
   trend_label: string;
   reason: string;
+  focus_status: "clean" | "caution" | "avoid";
+  focus_label: string;
+  focus_tags: string[];
+  focus_note: string;
+  event_risk: "low" | "elevated";
 }
 
 export interface OptionRec {

@@ -5,6 +5,7 @@ import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
 import { computeOptionStats } from "./option-stats";
+import { assessStockFocus } from "./stock-focus";
 
 export interface PriceMovement {
   days_7: number;
@@ -621,6 +622,11 @@ export interface OptionStatsPick {
   z_score_1m: number;
   trend_label: string;
   reason: string;
+  focus_status: "clean" | "caution" | "avoid";
+  focus_label: string;
+  focus_tags: string[];
+  focus_note: string;
+  event_risk: "low" | "elevated";
 }
 
 function regimeScoreBonus(regime: string) {
@@ -661,7 +667,6 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
       if (optionType === "call" && z1m > 1.5) optionScore -= 8;
       if (optionType === "put" && z1m < -1.5) optionScore -= 8;
       if (trend === "neutral" || stats.health.trend_label === "Sideways") optionScore += 5;
-      optionScore = Math.round(Math.min(100, Math.max(0, optionScore)));
 
       const why: string[] = [];
       if (stats.volatility.seller_favorability >= 55) why.push("strong vol edge");
@@ -670,6 +675,17 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
       if (stats.confidence.score >= 70) why.push("reliable stats");
       if (Math.abs(z1m) < 1) why.push("price near mean");
       else if (Math.abs(z1m) >= 1.5) why.push(`stretched ${z1m > 0 ? "+" : ""}${z1m}σ`);
+
+      const focus = assessStockFocus({
+        bars,
+        hv,
+        zScore1m: z1m,
+        volRegime: stats.volatility_regime,
+      });
+
+      if (focus.status === "avoid") optionScore -= 25;
+      else if (focus.status === "caution") optionScore -= 10;
+      optionScore = Math.round(Math.min(100, Math.max(0, optionScore)));
 
       return {
         symbol: sym,
@@ -684,6 +700,11 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
         z_score_1m: z1m,
         trend_label: stats.health.trend_label,
         reason: why.length ? why.join(", ") : stats.volatility.seller_label,
+        focus_status: focus.status,
+        focus_label: focus.label,
+        focus_tags: focus.tags,
+        focus_note: focus.note,
+        event_risk: focus.event_risk,
       };
     } catch {
       return null;

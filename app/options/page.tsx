@@ -39,6 +39,24 @@ function SuitabilityBadge({ s }: { s: string }) {
   return <span className="badge-watch">Caution</span>;
 }
 
+function FocusBadge({
+  status,
+  label,
+  tags,
+}: {
+  status: "clean" | "caution" | "avoid";
+  label: string;
+  tags?: string[];
+}) {
+  const cls =
+    status === "clean" ? "badge-buy" : status === "caution" ? "badge-watch" : "badge-sell";
+  return (
+    <span className={cls} title={tags?.join(" · ") || label}>
+      {label}
+    </span>
+  );
+}
+
 export default function OptionsPage() {
   const cache = useAppCache();
   const cacheSet = cache.set;
@@ -55,6 +73,7 @@ export default function OptionsPage() {
   const [statsPicksLoading, setStatsPicksLoading] = useState(false);
   const [error, setError] = useState("");
   const [statsPicksLoaded, setStatsPicksLoaded] = useState(cached?.statsPicksLoaded ?? false);
+  const [cleanOnly, setCleanOnly] = useState(false);
 
   const snapshotRef = useRef({
     symbol,
@@ -144,6 +163,10 @@ export default function OptionsPage() {
     strategyMode === "selling" ? "Option Selling" :
     strategyMode === "neutral" ? "Neutral" :
     strategyMode === "buying" ? "Option Buying" : "Directional";
+
+  const visibleStatsPicks = cleanOnly
+    ? statsPicks.filter((p) => p.focus_status === "clean")
+    : statsPicks;
 
   return (
     <div className="page-stack">
@@ -298,11 +321,29 @@ export default function OptionsPage() {
               Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Scans NIFTY 50 liquid names using IV edge, vol regime, distribution confidence, and price stretch. Highest{" "}
-              <strong>Option Score</strong> = best candidate today for {optionType === "call" ? "call" : "put"} selling.
+              Scans liquid NIFTY names for IV edge, regime, and confidence.{" "}
+              <strong>Focus</strong> flags news/odd activity (gaps, vol spikes, large moves). Pick{" "}
+              <strong>Clean</strong> names with the highest Option Score.
             </p>
           </div>
-          <button
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="pill-group" role="group">
+              <button
+                type="button"
+                className={`pill ${!cleanOnly ? "pill-active" : ""}`}
+                onClick={() => setCleanOnly(false)}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={`pill ${cleanOnly ? "pill-active" : ""}`}
+                onClick={() => setCleanOnly(true)}
+              >
+                Clean only
+              </button>
+            </div>
+            <button
             onClick={() => {
               scannedOptionTypeRef.current = null;
               loadStatsPicks();
@@ -311,11 +352,16 @@ export default function OptionsPage() {
           >
             <RefreshCw className={`h-3 w-3 ${statsPicksLoading ? "animate-spin" : ""}`} /> Rescan
           </button>
+          </div>
         </div>
         {statsPicksLoading && !statsPicksLoaded ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning 30 liquid NIFTY names…</p>
         ) : statsPicks.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
+        ) : visibleStatsPicks.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+            No clean names right now — switch to <strong>All</strong> or try the other side (Call/Put).
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -323,6 +369,7 @@ export default function OptionsPage() {
                 <tr>
                   <th>#</th>
                   <th>Stock</th>
+                  <th>Focus</th>
                   <th>Option Score</th>
                   <th>Vol Score</th>
                   <th>IV Rank</th>
@@ -335,14 +382,20 @@ export default function OptionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {statsPicks.map((p, i) => (
+                {visibleStatsPicks.map((p, i) => (
                   <tr
                     key={p.symbol}
                     className="cursor-pointer"
                     onClick={() => analyze(p.symbol)}
+                    style={{
+                      opacity: p.focus_status === "avoid" ? 0.72 : 1,
+                    }}
                   >
                     <td className="font-mono text-xs tabular-nums" style={{ color: "var(--fg-muted)" }}>{i + 1}</td>
                     <td className="font-medium">{p.name}</td>
+                    <td>
+                      <FocusBadge status={p.focus_status} label={p.focus_label} tags={p.focus_tags} />
+                    </td>
                     <td className="font-mono tabular-nums text-base" style={{ color: p.option_score >= 60 ? "var(--green)" : p.option_score >= 45 ? "var(--accent)" : "var(--fg-primary)" }}>
                       {p.option_score}
                     </td>
@@ -363,7 +416,7 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-          Click a row to load full statistical analysis for that stock. Sort by <strong>Option Score</strong> — start with #1.
+          Click a row for full analysis. Prefer <strong>Clean</strong> focus — skip <strong>News / odd</strong> unless using very wide strikes.
         </p>
       </div>
 

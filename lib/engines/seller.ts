@@ -5,6 +5,7 @@ import type { AgentOptionLeg } from "@/lib/data/agents/types";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
 import { historicalVol, normalizeIv, atmIvFromLegs, probAbove, computePriceMovement, mapPool } from "./options";
+import { detectEventRisk } from "./stock-focus";
 
 /**
  * Option Selling Assistant engine.
@@ -87,17 +88,6 @@ function trendToWord(trend: string, hv: number): TrendWord {
   if (trend === "uptrend") return "Bullish";
   if (trend === "downtrend") return "Bearish";
   return "Sideways";
-}
-
-function detectEventRisk(bars: { close: number }[], hv: number): { risk: "low" | "elevated"; note: string } {
-  const hv7 = bars.length > 26 ? historicalVol(bars.slice(0, -5)) : hv;
-  const volJumpPp = (hv - hv7) * 100;
-  const last = bars.at(-1)?.close ?? 0;
-  const prev = bars.at(-2)?.close ?? last;
-  const lastMovePct = prev ? Math.abs((last - prev) / prev) * 100 : 0;
-  if (volJumpPp > 4) return { risk: "elevated", note: "Volatility expanded sharply this week — possible event/news risk" };
-  if (lastMovePct > 3.5) return { risk: "elevated", note: "Large one-day move — possible event/news in play" };
-  return { risk: "low", note: "No abnormal volatility or price shock detected" };
 }
 
 function computeMaxPain(legs: AgentOptionLeg[]): number | null {

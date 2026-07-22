@@ -136,6 +136,20 @@ export const OPTIONS_INTERPRETATION_SECTIONS: InterpretationSection[] = [
     what: "Quick summary: trend, percentiles, distribution position, vol regime, and standard deviation.",
     how: "Use as an overview — do not decide from a single metric alone.",
   },
+  {
+    id: "focus",
+    title: "11. Focus (News / Odd Activity)",
+    what: "Flags stocks with abnormal price, volume, or volatility — possible news or events.",
+    table: [
+      { label: "Clean", meaning: "No unusual signatures — preferred for option selling" },
+      { label: "Caution", meaning: "Some odd activity — verify before selling" },
+      { label: "News / odd", meaning: "Likely event/news — avoid or use very wide strikes" },
+    ],
+    bullets: [
+      "News? — gap, large 1-day move, vol spike, or volume surge together",
+      "Tags like Gap open, Vol spike, Volume surge explain what triggered the flag",
+    ],
+  },
 ];
 
 export const OPTIONS_SELLER_ENVIRONMENT = {
