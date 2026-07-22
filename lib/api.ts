@@ -213,6 +213,7 @@ export interface OptionsAnalysis {
     summary: string;
     points: string[];
   };
+  stats?: import("@/lib/engines/option-stats").OptionStatsBundle;
 }
 
 export interface SellerContract {

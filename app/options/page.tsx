@@ -2,17 +2,16 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { fetchAPI, OptionsAnalysis, OptionsStockPick } from "@/lib/api";
-import { LabelWithInfo } from "@/components/InfoTip";
 import {
   SignalBadge,
   Disclaimer,
   LoadingSpinner,
   ErrorMessage,
-  LevelCard,
 } from "@/components/Sidebar";
-import { Search, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import DataIntelPanel from "@/components/DataIntelPanel";
 import SellerAssistant from "@/components/SellerAssistant";
+import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
 import { useAppCache } from "@/components/AppCacheProvider";
 
 const CACHE_KEY = "options";
@@ -29,95 +28,6 @@ type OptionsCache = {
   picksLoaded: boolean;
   analysisLoaded: boolean;
 };
-
-const MOVEMENT_DEFS = {
-  week: "Price change over the last ~7 trading days (1 week). Helps gauge very recent momentum.",
-  days15: "Price change over 15 trading days. Key window for option expiry cycles and swing moves.",
-  month: "Price change over ~22 trading days (1 month). Shows medium-term trend for strike selection.",
-};
-
-const VOL_DEFS = {
-  currentIv: "At-the-money implied volatility from live NSE chain (or HV estimate if chain unavailable).",
-  ivHv: "IV divided by 20-day historical vol. Above 1.0 means options are pricing more uncertainty than recent realized moves.",
-  volChg7: "Change in 20-day historical volatility vs ~7 trading days ago (percentage points). Proxy for vol expansion/contraction.",
-  volChg15: "HV change over 15 trading days — key window aligned with monthly expiry cycles.",
-  volChg30: "HV change over ~30 trading days — medium-term vol trend for strike width.",
-  theta: "Daily time decay (Black-Scholes). Negative for long options; sellers collect the opposite.",
-  theta7d: "Estimated premium erosion over 7 calendar days from theta alone (ignores delta/gamma).",
-};
-
-function VolChangeCard({
-  label,
-  change,
-  pastHv,
-  defKey,
-}: {
-  label: string;
-  change: number;
-  pastHv: number;
-  defKey: keyof typeof VOL_DEFS;
-}) {
-  const isUp = change > 0;
-  const isDown = change < 0;
-  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  const color = isUp ? "var(--red)" : isDown ? "var(--green)" : "var(--fg-tertiary)";
-  const bg = isUp ? "var(--red-muted)" : isDown ? "var(--green-muted)" : "var(--bg-secondary)";
-
-  return (
-    <div className="rounded-md p-4" style={{ background: bg, border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between">
-        <div className="field-label !mb-0">
-          <LabelWithInfo label={label} definition={VOL_DEFS[defKey]} />
-        </div>
-        <Icon className="h-3.5 w-3.5" style={{ color }} />
-      </div>
-      <p className="mt-2 text-2xl font-normal font-mono tabular-nums" style={{ color }}>
-        {change > 0 ? "+" : ""}{change} pp
-      </p>
-      <p className="mt-1 font-mono text-xs tabular-nums" style={{ color: "var(--fg-muted)" }}>
-        was {pastHv}% HV
-      </p>
-    </div>
-  );
-}
-function MoveCard({
-  label,
-  pct,
-  absChange,
-  defKey,
-}: {
-  label: string;
-  pct: number;
-  absChange: number;
-  defKey: keyof typeof MOVEMENT_DEFS;
-}) {
-  const isUp = pct > 0;
-  const isDown = pct < 0;
-  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  const color = isUp ? "var(--green)" : isDown ? "var(--red)" : "var(--fg-tertiary)";
-  const bg = isUp
-    ? "var(--green-muted)"
-    : isDown
-      ? "var(--red-muted)"
-      : "var(--bg-secondary)";
-
-  return (
-    <div className="rounded-md p-4" style={{ background: bg, border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between">
-        <div className="field-label !mb-0">
-          <LabelWithInfo label={label} definition={MOVEMENT_DEFS[defKey]} />
-        </div>
-        <Icon className="h-3.5 w-3.5" style={{ color }} />
-      </div>
-      <p className="mt-2 text-2xl font-normal font-mono tabular-nums" style={{ color }}>
-        {pct > 0 ? "+" : ""}{pct}%
-      </p>
-      <p className="mt-1 font-mono text-xs tabular-nums" style={{ color: "var(--fg-muted)" }}>
-        {absChange > 0 ? "+" : ""}₹{absChange} absolute
-      </p>
-    </div>
-  );
-}
 
 function SuitabilityBadge({ s }: { s: string }) {
   if (s === "favorable") return <span className="badge-buy">Favorable</span>;
@@ -219,7 +129,7 @@ export default function OptionsPage() {
           <p className="page-subtitle">
             {subTab === "seller"
               ? "Should I sell this option right now? One score, one answer."
-              : "Price movement context + probability-based strike selection"}
+              : "Probability-based decision support for option selling"}
           </p>
         </div>
       </div>
@@ -435,204 +345,42 @@ export default function OptionsPage() {
             agentQuotes={analysis.agent_quotes}
             agentsMs={analysis.agents_ms}
           />
-          {/* Price Movement Panel */}
-          {analysis.price_movement && (
-            <div className="card">
-              <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-                Underlying Price Movement
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <MoveCard
-                  label="1 Week (7d)"
-                  pct={analysis.price_movement.days_7}
-                  absChange={analysis.price_movement.change_7d}
-                  defKey="week"
-                />
-                <MoveCard
-                  label="15 Days"
-                  pct={analysis.price_movement.days_15}
-                  absChange={analysis.price_movement.change_15d}
-                  defKey="days15"
-                />
-                <MoveCard
-                  label="1 Month (~30d)"
-                  pct={analysis.price_movement.days_30}
-                  absChange={analysis.price_movement.change_30d}
-                  defKey="month"
-                />
-              </div>
-            </div>
-          )}
 
-          {/* Volatility & Time Decay Panel */}
-          {analysis.volatility && (
-            <div className="card">
-              <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-                Volatility & Time Decay Context
-              </h3>
-              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-md p-3" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                  <div className="field-label !mb-1">
-                    <LabelWithInfo label="ATM IV (Current)" definition={VOL_DEFS.currentIv} />
-                  </div>
-                  <p className="font-mono text-xl tabular-nums" style={{ color: "var(--accent)" }}>
-                    {analysis.volatility.current_iv}%
-                  </p>
-                </div>
-                <div className="rounded-md p-3" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                  <div className="field-label !mb-1">
-                    <LabelWithInfo label="IV / HV Ratio" definition={VOL_DEFS.ivHv} />
-                  </div>
-                  <p className="font-mono text-xl tabular-nums" style={{ color: analysis.volatility.iv_hv_ratio > 1.1 ? "var(--green)" : "var(--fg-primary)" }}>
-                    {analysis.volatility.iv_hv_ratio}x
-                  </p>
-                </div>
-                <div className="rounded-md p-3" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                  <p className="field-label !mb-1">Historical Vol (20d)</p>
-                  <p className="font-mono text-xl tabular-nums">{analysis.volatility.current_hv}%</p>
-                </div>
-                <div className="rounded-md p-3" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-                  <p className="field-label !mb-1">Days to Expiry</p>
-                  <p className="font-mono text-xl tabular-nums">{analysis.days_to_expiry} DTE</p>
-                </div>
-              </div>
-              <p className="mb-3 text-xs" style={{ color: "var(--fg-tertiary)" }}>
-                Volatility change (percentage points) over relevant trading windows — rising vol expands expected move; falling vol favors premium sellers.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <VolChangeCard
-                  label="7-Day Vol Change"
-                  change={analysis.volatility.change_7d}
-                  pastHv={analysis.volatility.hv_7d_ago}
-                  defKey="volChg7"
-                />
-                <VolChangeCard
-                  label="15-Day Vol Change"
-                  change={analysis.volatility.change_15d}
-                  pastHv={analysis.volatility.hv_15d_ago}
-                  defKey="volChg15"
-                />
-                <VolChangeCard
-                  label="30-Day Vol Change"
-                  change={analysis.volatility.change_30d}
-                  pastHv={analysis.volatility.hv_30d_ago}
-                  defKey="volChg30"
-                />
-              </div>
-            </div>
-          )}
+          {analysis.stats && <OptionsStatsDashboard analysis={analysis} />}
 
-          {/* Movement Insight for selected strategy */}
           {analysis.movement_insight && (
-            <div className={`card border ${
-              analysis.movement_insight.suitability === "favorable" ? "border-green-500/30" :
-              analysis.movement_insight.suitability === "avoid" ? "border-red-500/30" : "border-amber-500/30"
-            }`}>
+            <div
+              className={`card border ${
+                analysis.movement_insight.suitability === "favorable"
+                  ? "border-green-500/30"
+                  : analysis.movement_insight.suitability === "avoid"
+                    ? "border-red-500/30"
+                    : "border-amber-500/30"
+              }`}
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
                     Strategy Fit: {optionType === "call" ? "Call" : "Put"} {strategyLabel}
                   </h3>
-                  <p className="mt-2 text-sm" style={{ color: "var(--fg-secondary)" }}>{analysis.movement_insight.summary}</p>
+                  <p className="mt-2 text-sm" style={{ color: "var(--fg-secondary)" }}>
+                    {analysis.movement_insight.summary}
+                  </p>
                 </div>
                 <SuitabilityBadge s={analysis.movement_insight.suitability} />
               </div>
-              <ul className="mt-3 space-y-1">
-                {analysis.movement_insight.points.map((pt, i) => (
-                  <li key={i} className="text-xs" style={{ color: "var(--fg-secondary)" }}>• {pt}</li>
-                ))}
-              </ul>
             </div>
           )}
 
-          <div className="card">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2
-                  className="text-xl font-normal tracking-[-0.02em]"
-                  style={{ fontFamily: "var(--font-sans)", color: "var(--fg-primary)" }}
-                >
-                  {analysis.symbol}
-                </h2>
-                <p className="text-sm font-mono tabular-nums" style={{ color: "var(--fg-secondary)" }}>
-                  Spot: ₹{analysis.spot} · {analysis.days_to_expiry} DTE · Trend: {analysis.trend}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-              <LevelCard label="Expected Move" value={analysis.expected_move} />
-              <LevelCard label="Expected Range" value={`₹${analysis.expected_range[0]} – ₹${analysis.expected_range[1]}`} />
-              <LevelCard label="Historical Vol" value={`${analysis.historical_volatility}%`} />
-              {analysis.volatility && (
-                <LevelCard label="ATM IV" value={`${analysis.volatility.current_iv}%`} />
-              )}
-              {analysis.recommendations[0]?.theta != null && (
-                <LevelCard
-                  label="Top Strike Theta"
-                  value={`₹${Math.abs(analysis.recommendations[0].theta!).toFixed(2)}/day`}
-                />
-              )}
-              <LevelCard label="Data Source" value={analysis.chain_available ? "Live Chain" : "Estimated"} />
-            </div>
-
-            {analysis.note && (
-              <p className="mt-3 text-xs" style={{ color: "var(--amber)" }}>{analysis.note}</p>
-            )}
-          </div>
-
-          <div className="card">
-            <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-              Expected Price Range by Expiry
-            </h3>
-            <div className="relative h-32 rounded-lg bg-[var(--bg-secondary)] overflow-hidden">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <svg viewBox="0 0 400 120" className="w-full h-full">
-                  <defs>
-                    <linearGradient id="bellGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M 0 100 Q 100 100 200 20 Q 300 100 400 100 Z" fill="url(#bellGrad)" stroke="#3b82f6" strokeWidth="1" />
-                  <line x1="120" y1="10" x2="120" y2="100" stroke="#22c55e" strokeDasharray="4" strokeWidth="1" />
-                  <line x1="280" y1="10" x2="280" y2="100" stroke="#22c55e" strokeDasharray="4" strokeWidth="1" />
-                  <line x1="200" y1="10" x2="200" y2="100" stroke="#f59e0b" strokeWidth="1" />
-                  <text x="115" y="115" fill="#94a3b8" fontSize="10">{analysis.expected_range[0]}</text>
-                  <text x="190" y="115" fill="#f59e0b" fontSize="10">{analysis.spot}</text>
-                  <text x="265" y="115" fill="#94a3b8" fontSize="10">{analysis.expected_range[1]}</text>
-                </svg>
-              </div>
-            </div>
-            <p className="mt-2 text-center text-xs" style={{ color: "var(--fg-secondary)" }}>
-              1σ expected move: ±₹{analysis.expected_move} from spot ₹{analysis.spot}
+          {analysis.note && (
+            <p className="text-xs" style={{ color: "var(--amber)" }}>
+              {analysis.note}
             </p>
-          </div>
-
-          {analysis.strategy && (
-            <div className="card" style={{ borderColor: "rgba(245,78,0,0.25)" }}>
-              <h3 className="text-sm font-normal" style={{ color: "var(--accent)", fontFamily: "var(--font-sans)" }}>
-                Recommended Strategy: {analysis.strategy.name}
-              </h3>
-              <p className="mt-2 text-sm" style={{ color: "var(--fg-secondary)" }}>{analysis.strategy.reason}</p>
-              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {analysis.strategy.legs.map((leg, i) => (
-                  <div key={i} className="rounded-lg bg-[var(--bg-secondary)] p-2 text-xs">
-                    Leg {i + 1}: {leg}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex gap-4 text-xs" style={{ color: "var(--fg-secondary)" }}>
-                <span>Max Loss: {analysis.strategy.max_loss}</span>
-                {analysis.strategy.max_profit && <span>Max Profit: {analysis.strategy.max_profit}</span>}
-                <span>Risk: {analysis.strategy.risk}</span>
-              </div>
-            </div>
           )}
 
           <div className="card">
             <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-              Strike Recommendations
+              Engine Strike Picks
             </h3>
             {analysis.recommendations.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>

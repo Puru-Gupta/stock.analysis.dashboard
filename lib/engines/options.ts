@@ -4,6 +4,7 @@ import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
+import { computeOptionStats } from "./option-stats";
 
 export interface PriceMovement {
   days_7: number;
@@ -270,7 +271,7 @@ function scoreForStrategy(
 export async function analyzeOptions(symbol: string, optionType = "call", strategyMode = "directional", capital = 100000) {
   const sym = normalizeSymbol(symbol);
   const live = await fetchLiveMarketBundle(sym, {
-    days: 120,
+    days: 280,
     includeOptions: true,
   });
   // Prefer live NSE option legs when the chain returned CE/PE data
@@ -495,6 +496,21 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
   });
   const mode_details = getModeDetails(strategyMode);
 
+  const stats = computeOptionStats({
+    bars,
+    spot,
+    daysToExpiry,
+    atmIv,
+    trend,
+    optionType: optionType as "call" | "put",
+    legs: (chain?.legs || []).map((l) => ({
+      strike: l.strike,
+      ltp: l.ltp,
+      iv: l.iv,
+      type: l.type,
+    })),
+  });
+
   return {
     symbol: sym,
     spot: Math.round(spot * 100) / 100,
@@ -525,6 +541,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     })),
     agents_ms: live.agents_ms,
     analyzed_at: new Date().toISOString(),
+    stats,
   };
 }
 
