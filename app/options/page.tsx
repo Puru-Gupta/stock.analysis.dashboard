@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { fetchAPI, OptionsAnalysis, OptionsStockPick } from "@/lib/api";
+import { fetchAPI, OptionsAnalysis, OptionStatsPick } from "@/lib/api";
 import {
   SignalBadge,
   Disclaimer,
@@ -28,8 +28,8 @@ type OptionsCache = {
   capital: number;
   riskLevel: string;
   analysis: OptionsAnalysis | null;
-  stockPicks: OptionsStockPick[];
-  picksLoaded: boolean;
+  statsPicks: OptionStatsPick[];
+  statsPicksLoaded: boolean;
   analysisLoaded: boolean;
 };
 
@@ -49,11 +49,11 @@ export default function OptionsPage() {
   const [capital, setCapital] = useState(cached?.capital ?? 100000);
   const [riskLevel, setRiskLevel] = useState(cached?.riskLevel ?? "medium");
   const [analysis, setAnalysis] = useState<OptionsAnalysis | null>(cached?.analysis ?? null);
-  const [stockPicks, setStockPicks] = useState<OptionsStockPick[]>(cached?.stockPicks ?? []);
+  const [statsPicks, setStatsPicks] = useState<OptionStatsPick[]>(cached?.statsPicks ?? []);
   const [loading, setLoading] = useState(false);
-  const [picksLoading, setPicksLoading] = useState(false);
+  const [statsPicksLoading, setStatsPicksLoading] = useState(false);
   const [error, setError] = useState("");
-  const [picksLoaded, setPicksLoaded] = useState(cached?.picksLoaded ?? false);
+  const [statsPicksLoaded, setStatsPicksLoaded] = useState(cached?.statsPicksLoaded ?? false);
 
   const persist = useCallback(
     (patch: Partial<OptionsCache>) => {
@@ -64,13 +64,13 @@ export default function OptionsPage() {
         capital,
         riskLevel,
         analysis,
-        stockPicks,
-        picksLoaded,
+        statsPicks,
+        statsPicksLoaded,
         analysisLoaded: !!analysis,
         ...patch,
       });
     },
-    [cache, symbol, optionType, strategyMode, capital, riskLevel, analysis, stockPicks, picksLoaded],
+    [cache, symbol, optionType, strategyMode, capital, riskLevel, analysis, statsPicks, statsPicksLoaded],
   );
 
   useEffect(() => {
@@ -82,35 +82,42 @@ export default function OptionsPage() {
     setCapital(saved.capital);
     setRiskLevel(saved.riskLevel);
     setAnalysis(saved.analysis);
-    setStockPicks(saved.stockPicks);
-    setPicksLoaded(saved.picksLoaded);
+    setStatsPicks(saved.statsPicks ?? []);
+    setStatsPicksLoaded(saved.statsPicksLoaded ?? false);
   }, [cache]);
 
-  const loadPicks = useCallback(async () => {
-    setPicksLoading(true);
+  const loadStatsPicks = useCallback(async () => {
+    setStatsPicksLoading(true);
     try {
-      const data = await fetchAPI<OptionsStockPick[]>(
-        `/api/options/scan?strategy_mode=${strategyMode}&option_type=${optionType}&limit=12`
+      const data = await fetchAPI<OptionStatsPick[]>(
+        `/api/options/stats/scan?option_type=${optionType}&limit=20`,
       );
-      setStockPicks(data);
-      setPicksLoaded(true);
-      persist({ stockPicks: data, picksLoaded: true, strategyMode, optionType });
+      setStatsPicks(data);
+      setStatsPicksLoaded(true);
+      persist({ statsPicks: data, statsPicksLoaded: true, optionType });
     } catch {
-      setStockPicks([]);
+      setStatsPicks([]);
     } finally {
-      setPicksLoading(false);
+      setStatsPicksLoading(false);
     }
-  }, [strategyMode, optionType, persist]);
+  }, [optionType, persist]);
 
-  const analyze = useCallback(async () => {
+  useEffect(() => {
+    if (subTab !== "analysis") return;
+    loadStatsPicks();
+  }, [subTab, optionType, loadStatsPicks]);
+
+  const analyze = useCallback(async (symOverride?: string) => {
+    const sym = symOverride ?? symbol;
+    setSymbol(sym);
     setLoading(true);
     setError("");
     try {
       const data = await fetchAPI<OptionsAnalysis>(
-        `/api/options/analyze?symbol=${encodeURIComponent(symbol)}&option_type=${optionType}&strategy_mode=${strategyMode}&capital=${capital}&risk_level=${riskLevel}`
+        `/api/options/analyze?symbol=${encodeURIComponent(sym)}&option_type=${optionType}&strategy_mode=${strategyMode}&capital=${capital}&risk_level=${riskLevel}`
       );
       setAnalysis(data);
-      persist({ analysis: data, symbol, optionType, strategyMode, capital, riskLevel, analysisLoaded: true });
+      persist({ analysis: data, symbol: sym, optionType, strategyMode, capital, riskLevel, analysisLoaded: true });
       if (data.error) setError(data.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
@@ -184,7 +191,7 @@ export default function OptionsPage() {
             <div className="product-query-actions">
               <button
                 type="button"
-                onClick={analyze}
+                onClick={() => analyze()}
                 disabled={loading}
                 className="product-action-primary"
               >
@@ -270,72 +277,75 @@ export default function OptionsPage() {
         </div>
       </div>
 
-      {/* Stock Recommendations by Strategy */}
-      <div className="card">
+      {/* Best stocks by statistical option score */}
+      <div className="card" style={{ borderColor: "rgba(245,78,0,0.2)" }}>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-              Best Stocks for {strategyLabel} — {optionType === "call" ? "Calls" : "Puts"}
+              Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Ranked by price movement, trend, and volatility fit for your selected strategy
+              Scans NIFTY 50 liquid names using IV edge, vol regime, distribution confidence, and price stretch. Highest{" "}
+              <strong>Option Score</strong> = best candidate today for {optionType === "call" ? "call" : "put"} selling.
             </p>
           </div>
-          <button onClick={loadPicks} className="btn-secondary flex items-center gap-2 text-xs shrink-0">
-            <RefreshCw className={`h-3 w-3 ${picksLoading ? "animate-spin" : ""}`} /> Refresh
+          <button onClick={loadStatsPicks} className="btn-secondary flex items-center gap-2 text-xs shrink-0">
+            <RefreshCw className={`h-3 w-3 ${statsPicksLoading ? "animate-spin" : ""}`} /> Rescan
           </button>
         </div>
-        {picksLoading ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning NIFTY 50 liquid names...</p>
-        ) : !picksLoaded ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
-            Click <strong>Refresh</strong> to scan stocks for this strategy.
-          </p>
-        ) : stockPicks.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No matching stocks found for this strategy.</p>
+        {statsPicksLoading && !statsPicksLoaded ? (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning 30 liquid NIFTY names…</p>
+        ) : statsPicks.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>Stock</th>
-                  <th>Score</th>
-                  <th>7d</th>
-                  <th>15d</th>
-                  <th>30d</th>
-                  <th>HV</th>
+                  <th>Option Score</th>
+                  <th>Vol Score</th>
+                  <th>IV Rank</th>
+                  <th>IV/HV</th>
+                  <th>Regime</th>
+                  <th>Conf.</th>
+                  <th>Z (1M)</th>
                   <th>Trend</th>
-                  <th>Fit</th>
-                  <th>Strategy</th>
                   <th>Why</th>
                 </tr>
               </thead>
               <tbody>
-                {stockPicks.map((p) => (
-                  <tr key={p.symbol} onClick={() => { setSymbol(p.symbol); }}>
+                {statsPicks.map((p, i) => (
+                  <tr
+                    key={p.symbol}
+                    className="cursor-pointer"
+                    onClick={() => analyze(p.symbol)}
+                  >
+                    <td className="font-mono text-xs tabular-nums" style={{ color: "var(--fg-muted)" }}>{i + 1}</td>
                     <td className="font-medium">{p.name}</td>
-                    <td className="font-mono tabular-nums" style={{ color: "var(--accent)" }}>{p.score}</td>
-                    <td className="font-mono text-xs tabular-nums" style={{ color: p.days_7 > 0 ? "var(--green)" : p.days_7 < 0 ? "var(--red)" : "var(--fg-tertiary)" }}>
-                      {p.days_7 > 0 ? "+" : ""}{p.days_7}%
+                    <td className="font-mono tabular-nums text-base" style={{ color: p.option_score >= 60 ? "var(--green)" : p.option_score >= 45 ? "var(--accent)" : "var(--fg-primary)" }}>
+                      {p.option_score}
                     </td>
-                    <td className="font-mono text-xs tabular-nums" style={{ color: p.days_15 > 0 ? "var(--green)" : p.days_15 < 0 ? "var(--red)" : "var(--fg-tertiary)" }}>
-                      {p.days_15 > 0 ? "+" : ""}{p.days_15}%
+                    <td className="font-mono text-xs tabular-nums">{p.seller_vol_score}</td>
+                    <td className="font-mono text-xs tabular-nums">{p.iv_rank}%</td>
+                    <td className="font-mono text-xs tabular-nums">{p.iv_hv_ratio}x</td>
+                    <td className="text-xs">{p.regime}</td>
+                    <td className="font-mono text-xs tabular-nums">{p.confidence}</td>
+                    <td className="font-mono text-xs tabular-nums" style={{ color: Math.abs(p.z_score_1m) >= 1.5 ? "var(--amber)" : undefined }}>
+                      {p.z_score_1m > 0 ? "+" : ""}{p.z_score_1m}
                     </td>
-                    <td className="font-mono text-xs tabular-nums" style={{ color: p.days_30 > 0 ? "var(--green)" : p.days_30 < 0 ? "var(--red)" : "var(--fg-tertiary)" }}>
-                      {p.days_30 > 0 ? "+" : ""}{p.days_30}%
-                    </td>
-                    <td className="font-mono text-xs tabular-nums">{p.hv}%</td>
-                    <td className="text-xs capitalize">{p.trend}</td>
-                    <td><SuitabilityBadge s={p.suitability} /></td>
-                    <td className="text-xs" style={{ color: "var(--accent)" }}>{p.recommended_strategy}</td>
-                    <td className="max-w-[200px] truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{p.reason}</td>
+                    <td className="text-xs">{p.trend_label}</td>
+                    <td className="max-w-[180px] truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{p.reason}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>Click a row to analyze that stock</p>
+        <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
+          Click a row to load full statistical analysis for that stock. Sort by <strong>Option Score</strong> — start with #1.
+        </p>
       </div>
 
       {loading && <LoadingSpinner />}

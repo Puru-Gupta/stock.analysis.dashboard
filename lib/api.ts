@@ -301,6 +301,21 @@ export interface OptionsStockPick {
   recommended_strategy: string;
 }
 
+export interface OptionStatsPick {
+  symbol: string;
+  name: string;
+  spot: number;
+  option_score: number;
+  seller_vol_score: number;
+  iv_rank: number;
+  iv_hv_ratio: number;
+  regime: string;
+  confidence: number;
+  z_score_1m: number;
+  trend_label: string;
+  reason: string;
+}
+
 export interface OptionRec {
   strike: number;
   premium: number;

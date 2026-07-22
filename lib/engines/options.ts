@@ -607,3 +607,88 @@ export async function scanOptionsUniverse(strategyMode = "selling", optionType =
 
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
+
+export interface OptionStatsPick {
+  symbol: string;
+  name: string;
+  spot: number;
+  option_score: number;
+  seller_vol_score: number;
+  iv_rank: number;
+  iv_hv_ratio: number;
+  regime: string;
+  confidence: number;
+  z_score_1m: number;
+  trend_label: string;
+  reason: string;
+}
+
+function regimeScoreBonus(regime: string) {
+  if (regime === "Very Quiet" || regime === "Quiet") return 20;
+  if (regime === "Normal") return 15;
+  if (regime === "Elevated") return 8;
+  if (regime === "High") return 3;
+  return 0;
+}
+
+/** Rank liquid names by statistical option-selling score (vol, regime, confidence, stretch). */
+export async function scanOptionStatsUniverse(optionType = "call", limit = 20): Promise<OptionStatsPick[]> {
+  const liquid = NIFTY_50.slice(0, 30);
+
+  const results = await mapPool(liquid, 6, async (sym) => {
+    try {
+      const { bars } = await getPriceHistory(sym, 280);
+      if (bars.length < 40) return null;
+      const spot = bars.at(-1)!.close;
+      const trend = detectTrend(bars);
+      const hv = historicalVol(bars);
+      const stats = computeOptionStats({
+        bars,
+        spot,
+        daysToExpiry: 30,
+        atmIv: hv,
+        trend,
+        optionType: optionType as "call" | "put",
+        legs: [],
+      });
+
+      const z1m = stats.distributions.find((d) => d.key === "1m")?.z_score ?? 0;
+      let optionScore =
+        stats.volatility.seller_favorability * 0.4 +
+        (stats.confidence.score / 100) * 15 +
+        regimeScoreBonus(stats.volatility_regime);
+      optionScore -= Math.min(15, Math.abs(z1m) * 5);
+      if (optionType === "call" && z1m > 1.5) optionScore -= 8;
+      if (optionType === "put" && z1m < -1.5) optionScore -= 8;
+      if (trend === "neutral" || stats.health.trend_label === "Sideways") optionScore += 5;
+      optionScore = Math.round(Math.min(100, Math.max(0, optionScore)));
+
+      const why: string[] = [];
+      if (stats.volatility.seller_favorability >= 55) why.push("strong vol edge");
+      else if (stats.volatility.iv_above_hv) why.push("IV > HV");
+      if (stats.volatility_regime === "Quiet" || stats.volatility_regime === "Very Quiet") why.push("quiet regime");
+      if (stats.confidence.score >= 70) why.push("reliable stats");
+      if (Math.abs(z1m) < 1) why.push("price near mean");
+      else if (Math.abs(z1m) >= 1.5) why.push(`stretched ${z1m > 0 ? "+" : ""}${z1m}σ`);
+
+      return {
+        symbol: sym,
+        name: sym.replace(".NS", ""),
+        spot: Math.round(spot * 100) / 100,
+        option_score: optionScore,
+        seller_vol_score: stats.volatility.seller_favorability,
+        iv_rank: stats.volatility.iv_rank,
+        iv_hv_ratio: stats.volatility.iv_hv_ratio,
+        regime: stats.volatility_regime,
+        confidence: stats.confidence.score,
+        z_score_1m: z1m,
+        trend_label: stats.health.trend_label,
+        reason: why.length ? why.join(", ") : stats.volatility.seller_label,
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  return results.sort((a, b) => b.option_score - a.option_score).slice(0, limit);
+}
