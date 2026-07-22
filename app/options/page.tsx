@@ -12,6 +12,10 @@ import { Search, RefreshCw } from "lucide-react";
 import DataIntelPanel from "@/components/DataIntelPanel";
 import SellerAssistant from "@/components/SellerAssistant";
 import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
+import {
+  OptionsInterpretationGuideButton,
+  OptionsInterpretationSummary,
+} from "@/components/OptionsInterpretationGuide";
 import { useAppCache } from "@/components/AppCacheProvider";
 
 const CACHE_KEY = "options";
@@ -132,6 +136,7 @@ export default function OptionsPage() {
               : "Probability-based decision support for option selling"}
           </p>
         </div>
+        {subTab === "analysis" && <OptionsInterpretationGuideButton className="shrink-0" />}
       </div>
 
       <div className="pill-group" role="tablist" aria-label="Options view">
@@ -346,7 +351,12 @@ export default function OptionsPage() {
             agentsMs={analysis.agents_ms}
           />
 
-          {analysis.stats && <OptionsStatsDashboard analysis={analysis} />}
+          {analysis.stats && (
+            <>
+              <OptionsInterpretationSummary />
+              <OptionsStatsDashboard analysis={analysis} />
+            </>
+          )}
 
           {analysis.movement_insight && (
             <div
