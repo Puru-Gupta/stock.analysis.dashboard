@@ -143,11 +143,12 @@ export const OPTIONS_INTERPRETATION_SECTIONS: InterpretationSection[] = [
     table: [
       { label: "Clean", meaning: "No unusual signatures — preferred for option selling" },
       { label: "Caution", meaning: "Some odd activity — verify before selling" },
-      { label: "News / odd", meaning: "Likely event/news — avoid or use very wide strikes" },
+      { label: "Results soon", meaning: "Earnings/results within ~3 weeks — elevated event risk" },
     ],
     bullets: [
       "News? — gap, large 1-day move, vol spike, or volume surge together",
-      "Tags like Gap open, Vol spike, Volume surge explain what triggered the flag",
+      "Results soon — upcoming earnings within ~3 weeks (from Yahoo calendar)",
+      "Tags like Gap open, Vol spike, Results 31 Jul explain what triggered the flag",
     ],
   },
 ];

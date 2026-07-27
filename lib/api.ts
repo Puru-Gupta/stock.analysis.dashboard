@@ -214,6 +214,13 @@ export interface OptionsAnalysis {
     points: string[];
   };
   stats?: import("@/lib/engines/option-stats").OptionStatsBundle;
+  premium_decay?: import("@/lib/engines/premium-decay").PremiumDecayTimeline | null;
+  expiry_comparison?: import("@/lib/engines/premium-decay").ExpiryDecayComparison | null;
+  next_expiry_chain?: {
+    expiry: string;
+    days_to_expiry: number;
+    recommendations: OptionRec[];
+  } | null;
 }
 
 export interface SellerContract {
@@ -246,6 +253,7 @@ export interface SellerContract {
     bid_ask_spread_pct: number | null;
   };
   live: boolean;
+  decay_timeline?: import("@/lib/engines/premium-decay").PremiumDecayTimeline;
 }
 
 export interface SellerBoard {
@@ -266,12 +274,21 @@ export interface SellerBoard {
   pcr: number | null;
   max_pain: number | null;
   chain_available: boolean;
+  expiries?: string[];
   note?: string;
   error?: string;
   contracts: SellerContract[];
   smile: { strike: number; ce_iv: number | null; pe_iv: number | null }[];
   data_quality?: DataQuality;
   analyzed_at: string;
+  earnings_days?: number;
+  earnings_label?: string;
+  expiry_comparison?: import("@/lib/engines/premium-decay").ExpiryDecayComparison | null;
+  next_expiry_chain?: {
+    expiry: string;
+    days_to_expiry: number;
+    contracts: SellerContract[];
+  } | null;
 }
 
 export interface SellerPick {
@@ -319,6 +336,9 @@ export interface OptionStatsPick {
   focus_tags: string[];
   focus_note: string;
   event_risk: "low" | "elevated";
+  earnings_date?: string;
+  earnings_days?: number;
+  earnings_label?: string;
 }
 
 export interface OptionRec {

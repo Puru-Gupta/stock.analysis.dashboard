@@ -95,8 +95,8 @@ export default function DataIntelPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {agentQuotes.map((q) => (
-                    <tr key={q.source}>
+                  {agentQuotes.map((q, i) => (
+                    <tr key={`${q.source}-${i}`}>
                       <td>{SOURCE_LABEL[q.source] || q.source}</td>
                       <td className="font-mono tabular-nums">₹{q.last.toLocaleString("en-IN")}</td>
                       <td className="font-mono tabular-nums">{q.latency_ms}ms</td>

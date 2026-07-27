@@ -280,9 +280,11 @@ export async function fetchLiveMarketBundle(
   if (!bars.length && nseBars.ok) bars = nseBars.bars;
 
   const quotes: AgentQuote[] = [yfQuote, nseQuote, communityQuote].filter((q) => q.ok || q.source === "yfinance");
-  if (yfBars.ok) quotes.push(quoteFromBars("yfinance", symbol, yfBars.bars));
-  else if (yahooBars.ok) quotes.push(quoteFromBars("yahoo_http", symbol, yahooBars.bars));
-  else if (pythonBars.ok) quotes.push(quoteFromBars("yahoo_python", symbol, pythonBars.bars));
+  // Only add a bars-derived quote when that source isn't already present (avoids duplicate React keys / double-count).
+  const hasSource = (src: string) => quotes.some((q) => q.source === src && q.ok);
+  if (yfBars.ok && !hasSource("yfinance")) quotes.push(quoteFromBars("yfinance", symbol, yfBars.bars));
+  else if (yahooBars.ok && !hasSource("yahoo_http")) quotes.push(quoteFromBars("yahoo_http", symbol, yahooBars.bars));
+  else if (pythonBars.ok && !hasSource("yahoo_python")) quotes.push(quoteFromBars("yahoo_python", symbol, pythonBars.bars));
 
   const quality = buildQualityReport({
     quotes,

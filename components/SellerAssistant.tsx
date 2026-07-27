@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchAPI, SellerBoard, SellerContract, SellerPick } from "@/lib/api";
+import { compareNearestExpiries } from "@/lib/engines/premium-decay";
+import { daysToExpiryFromNseDate } from "@/lib/engines/greeks";
+import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import { LoadingSpinner, ErrorMessage } from "@/components/Sidebar";
 import { Search, Sparkles, X, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppCache } from "@/components/AppCacheProvider";
@@ -169,6 +172,23 @@ function AnalysisPanel({
   const riskColor =
     contract.risk.level === "low" ? "var(--green)" : contract.risk.level === "medium" ? "var(--amber)" : "var(--red)";
 
+  const expiryComparison = useMemo(() => {
+    if (!board.expiries || board.expiries.length < 2 || !contract.decay_timeline) return null;
+    return compareNearestExpiries({
+      spot: board.spot,
+      strike: contract.strike,
+      vol: contract.advanced.iv / 100,
+      optionType: contract.type === "PE" ? "put" : "call",
+      expiries: board.expiries,
+      dteForExpiry: daysToExpiryFromNseDate,
+      premiumForExpiry: () => null,
+      earnings:
+        board.earnings_days != null
+          ? { days_away: board.earnings_days, label: board.earnings_label || "" }
+          : null,
+    });
+  }, [board, contract]);
+
   return (
     <div
       className="fixed inset-0 z-[100] flex justify-end"
@@ -294,6 +314,10 @@ function AnalysisPanel({
             <ExpectedMoveVisual board={board} contract={contract} />
           </div>
 
+          {contract.decay_timeline && (
+            <PremiumDecayTimelinePanel timeline={contract.decay_timeline} comparison={expiryComparison} />
+          )}
+
           {/* Advanced — collapsed by default */}
           <div className="rounded-md" style={{ border: "1px solid var(--border)" }}>
             <button
@@ -338,14 +362,74 @@ function AnalysisPanel({
   );
 }
 
+function SellerContractsTable({
+  contracts,
+  onSelect,
+}: {
+  contracts: SellerContract[];
+  onSelect: (c: SellerContract) => void;
+}) {
+  if (contracts.length === 0) {
+    return <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No contracts to score for this filter.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Contract</th>
+            <th>Premium</th>
+            <th>Prob. of Profit</th>
+            <th>Premium Edge</th>
+            <th>Seller Score</th>
+            <th>Rating</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {contracts.map((c) => (
+            <tr key={`${c.expiry}-${c.type}-${c.strike}`} onClick={() => onSelect(c)} className="cursor-pointer">
+              <td className="font-medium font-mono tabular-nums">
+                {c.strike} {c.type}
+              </td>
+              <td className="font-mono tabular-nums">₹{c.premium}</td>
+              <td className="font-mono tabular-nums" style={{ color: c.pop >= 85 ? "var(--green)" : "var(--fg-primary)" }}>
+                {Math.round(c.pop)}%
+              </td>
+              <td className="font-mono tabular-nums" style={{ color: !c.premium_edge_ok ? "var(--fg-muted)" : c.premium_edge > 0 ? "var(--green)" : c.premium_edge < 0 ? "var(--red)" : "var(--fg-tertiary)" }}>
+                {c.premium_edge_ok ? `${c.premium_edge > 0 ? "+" : ""}${Math.round(c.premium_edge)}%` : "—"}
+              </td>
+              <td className="font-mono tabular-nums" style={{ color: "var(--accent)" }}>{c.seller_score}</td>
+              <td><RatingBadge c={c} /></td>
+              <td>
+                <button
+                  type="button"
+                  className="btn-secondary flex items-center gap-1.5 text-xs whitespace-nowrap"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(c);
+                  }}
+                >
+                  <Sparkles className="h-3 w-3" style={{ color: "var(--accent)" }} />
+                  AI Analysis
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function SellerAssistant() {
   const cache = useAppCache();
-  const cached = cache.get<SellerCache>(CACHE_KEY);
-  const [symbol, setSymbol] = useState(cached?.symbol ?? "NIFTY");
-  const [typeFilter, setTypeFilter] = useState(cached?.typeFilter ?? "all");
-  const [board, setBoard] = useState<SellerBoard | null>(cached?.board ?? null);
-  const [picks, setPicks] = useState<SellerPick[]>(cached?.picks ?? []);
-  const [picksLoaded, setPicksLoaded] = useState(cached?.picksLoaded ?? false);
+  // Defaults only — restore after cache.ready to avoid hydration mismatch.
+  const [symbol, setSymbol] = useState("NIFTY");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [board, setBoard] = useState<SellerBoard | null>(null);
+  const [picks, setPicks] = useState<SellerPick[]>([]);
+  const [picksLoaded, setPicksLoaded] = useState(false);
   const [picksLoading, setPicksLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -355,6 +439,20 @@ export default function SellerAssistant() {
   symbolRef.current = symbol;
   const picksRef = useRef({ picks, picksLoaded });
   picksRef.current = { picks, picksLoaded };
+  const [cacheRestored, setCacheRestored] = useState(false);
+
+  useEffect(() => {
+    if (!cache.ready || cacheRestored) return;
+    const saved = cache.get<SellerCache>(CACHE_KEY);
+    if (saved) {
+      setSymbol(saved.symbol ?? "NIFTY");
+      setTypeFilter(saved.typeFilter ?? "all");
+      setBoard(saved.board ?? null);
+      setPicks(saved.picks ?? []);
+      setPicksLoaded(saved.picksLoaded ?? false);
+    }
+    setCacheRestored(true);
+  }, [cache, cacheRestored]);
 
   const analyze = useCallback(
     async (silent = false) => {
@@ -427,13 +525,14 @@ export default function SellerAssistant() {
     }
   }, [cache, typeFilter]);
 
-  // Load suggestions once on first open
+  // Load suggestions once on first open (after cache restore)
   const picksAutoloaded = useRef(false);
   useEffect(() => {
+    if (!cacheRestored) return;
     if (picksAutoloaded.current || picksLoaded) return;
     picksAutoloaded.current = true;
     loadPicks();
-  }, [picksLoaded, loadPicks]);
+  }, [cacheRestored, picksLoaded, loadPicks]);
 
   const analyzeSymbol = useCallback(
     (sym: string) => {
@@ -445,6 +544,9 @@ export default function SellerAssistant() {
   );
 
   const contracts = (board?.contracts ?? []).filter(
+    (c) => typeFilter === "all" || c.type === (typeFilter === "call" ? "CE" : "PE"),
+  );
+  const nextContracts = (board?.next_expiry_chain?.contracts ?? []).filter(
     (c) => typeFilter === "all" || c.type === (typeFilter === "call" ? "CE" : "PE"),
   );
 
@@ -609,62 +711,27 @@ export default function SellerAssistant() {
           {/* Contracts table */}
           <div className="card">
             <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-              Should I sell this option?
+              {board.next_expiry_chain
+                ? `Current expiry — ${board.expiry} (${board.days_to_expiry} DTE)`
+                : "Should I sell this option?"}
             </h3>
-            {contracts.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No contracts to score for this filter.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Contract</th>
-                      <th>Premium</th>
-                      <th>Prob. of Profit</th>
-                      <th>Premium Edge</th>
-                      <th>Seller Score</th>
-                      <th>Rating</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contracts.map((c) => (
-                      <tr key={`${c.type}-${c.strike}`} onClick={() => setSelected(c)} className="cursor-pointer">
-                        <td className="font-medium font-mono tabular-nums">
-                          {c.strike} {c.type}
-                        </td>
-                        <td className="font-mono tabular-nums">₹{c.premium}</td>
-                        <td className="font-mono tabular-nums" style={{ color: c.pop >= 85 ? "var(--green)" : "var(--fg-primary)" }}>
-                          {Math.round(c.pop)}%
-                        </td>
-                        <td className="font-mono tabular-nums" style={{ color: !c.premium_edge_ok ? "var(--fg-muted)" : c.premium_edge > 0 ? "var(--green)" : c.premium_edge < 0 ? "var(--red)" : "var(--fg-tertiary)" }}>
-                          {c.premium_edge_ok ? `${c.premium_edge > 0 ? "+" : ""}${Math.round(c.premium_edge)}%` : "—"}
-                        </td>
-                        <td className="font-mono tabular-nums" style={{ color: "var(--accent)" }}>{c.seller_score}</td>
-                        <td><RatingBadge c={c} /></td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-secondary flex items-center gap-1.5 text-xs whitespace-nowrap"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelected(c);
-                            }}
-                          >
-                            <Sparkles className="h-3 w-3" style={{ color: "var(--accent)" }} />
-                            AI Analysis
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <SellerContractsTable contracts={contracts} onSelect={setSelected} />
             <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
               Scores weight IV rank, IV vs realized vol, probability of profit, distance beyond the expected move, trend, liquidity, and event risk.
             </p>
           </div>
+
+          {board.next_expiry_chain && (
+            <div className="card">
+              <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
+                Next expiry — {board.next_expiry_chain.expiry} ({board.next_expiry_chain.days_to_expiry} DTE)
+              </h3>
+              <p className="mb-3 text-xs" style={{ color: "var(--fg-secondary)" }}>
+                Current series has ≤10 DTE — use the next expiry for new premium-selling positions.
+              </p>
+              <SellerContractsTable contracts={nextContracts} onSelect={setSelected} />
+            </div>
+          )}
         </>
       )}
 

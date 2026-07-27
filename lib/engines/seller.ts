@@ -5,7 +5,10 @@ import type { AgentOptionLeg } from "@/lib/data/agents/types";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
 import { historicalVol, normalizeIv, atmIvFromLegs, probAbove, computePriceMovement, mapPool } from "./options";
-import { detectEventRisk } from "./stock-focus";
+import { assessStockFocus } from "./stock-focus";
+import { fetchUpcomingEarnings } from "@/lib/data/earnings-calendar";
+import { buildPremiumDecayTimeline, compareNearestExpiries, legPremiumAtExpiry } from "./premium-decay";
+import { resolveOptionExpiries } from "./chain-expiry";
 
 /**
  * Option Selling Assistant engine.
@@ -51,6 +54,7 @@ export interface SellerContract {
     bid_ask_spread_pct: number | null;
   };
   live: boolean;
+  decay_timeline?: import("./premium-decay").PremiumDecayTimeline;
 }
 
 interface ChainContext {
@@ -64,6 +68,8 @@ interface ChainContext {
   eventNote: string;
   expiry: string;
   live: boolean;
+  earningsDaysAway?: number | null;
+  earningsLabel?: string | null;
 }
 
 /**
@@ -262,7 +268,101 @@ function buildContract(
       bid_ask_spread_pct: spreadPct,
     },
     live: ctx.live,
+    decay_timeline: buildPremiumDecayTimeline({
+      spot: ctx.spot,
+      strike: leg.strike,
+      vol: leg.vol,
+      daysToExpiry: ctx.dte,
+      optionType: leg.type === "PE" ? "put" : "call",
+      livePremium: ctx.live ? leg.premium : undefined,
+      expiry: ctx.expiry,
+      earnings:
+        ctx.earningsDaysAway != null
+          ? { days_away: ctx.earningsDaysAway, label: ctx.earningsLabel || "" }
+          : null,
+    }),
   };
+}
+
+function selectExpiryLegs(chain: { legs: AgentOptionLeg[] }, expiry: string): AgentOptionLeg[] {
+  let expiryLegs = chain.legs.filter((l) => l.ltp > 0);
+  const exact = expiryLegs.filter((l) => l.expiry === expiry);
+  if (exact.length >= 6) expiryLegs = exact;
+  return expiryLegs;
+}
+
+function scoreContractsForExpiry(
+  chain: { legs: AgentOptionLeg[] },
+  expiry: string,
+  dte: number,
+  spot: number,
+  hv: number,
+  atmIv: number,
+  ivRank: number,
+  trendWord: TrendWord,
+  eventRisk: "low" | "elevated",
+  eventNote: string,
+  earnings: Awaited<ReturnType<typeof fetchUpcomingEarnings>>,
+  chainAvailable: boolean,
+): SellerContract[] {
+  const em = spot * atmIv * Math.sqrt(dte / 365);
+  const expiryLegs = selectExpiryLegs(chain, expiry);
+  const ctx: ChainContext = {
+    spot,
+    hv,
+    dte,
+    em,
+    ivRank,
+    trendWord,
+    eventRisk,
+    eventNote,
+    expiry: expiry || "~30d",
+    live: chainAvailable,
+    earningsDaysAway: earnings?.days_away ?? null,
+    earningsLabel: earnings?.label ?? null,
+  };
+
+  const band = Math.max(em * 2.5, spot * 0.12);
+  let contracts: SellerContract[];
+
+  if (chainAvailable && expiryLegs.length >= 6) {
+    contracts = expiryLegs
+      .filter((l) => Math.abs(l.strike - spot) <= band)
+      .map((l) =>
+        buildContract(
+          {
+            type: l.type,
+            strike: l.strike,
+            premium: l.ltp,
+            vol: normalizeIv(l.iv, hv),
+            oi: l.oi || 0,
+            oiChange: l.change_oi || 0,
+            volume: l.volume || 0,
+            bid: l.bid,
+            ask: l.ask,
+          },
+          ctx,
+        ),
+      );
+  } else {
+    ctx.live = false;
+    const step = spot > 1000 ? 50 : spot > 500 ? 20 : 10;
+    contracts = [];
+    for (let i = -6; i <= 6; i++) {
+      const strike = Math.round(spot / step) * step + i * step;
+      if (strike <= 0) continue;
+      for (const type of ["CE", "PE"] as const) {
+        const premium = blackScholesGreeks(spot, strike, hv, dte, type === "PE" ? "put" : "call").price;
+        if (premium < 0.5) continue;
+        contracts.push(
+          buildContract({ type, strike, premium, vol: hv, oi: 0, oiChange: 0, volume: 0 }, ctx),
+        );
+      }
+    }
+  }
+
+  contracts.sort((a, b) => b.seller_score - a.seller_score);
+  return contracts.slice(0, 40);
 }
 
 export async function analyzeSellerBoard(symbol: string) {
@@ -289,74 +389,78 @@ export async function analyzeSellerBoard(symbol: string) {
 
   const hv = historicalVol(bars);
   const trendWord = trendToWord(detectTrend(bars), hv);
-  const { risk: eventRisk, note: eventNote } = detectEventRisk(bars, hv);
+  const earnings = await fetchUpcomingEarnings(sym);
+  const focus = assessStockFocus({ bars, hv, earnings });
+  const eventRisk = focus.event_risk;
+  const eventNote = focus.note;
 
-  const nearestExpiry = chain?.expiries?.[0] || "";
-  const dte = nearestExpiry ? daysToExpiryFromNseDate(nearestExpiry) : 30;
+  const resolved = resolveOptionExpiries(chain?.expiries);
+  const nearestExpiry = resolved.nearestExpiry;
+  const dte = resolved.nearestDte;
   const atmIv = atmIvFromLegs(chain?.legs || [], spot, hv);
   const { rank: ivRank, percentile: ivPercentile } = ivRankFromHvSeries(bars, atmIv);
   const em = spot * atmIv * Math.sqrt(dte / 365);
   const expectedRange: [number, number] = [r2(spot - em), r2(spot + em)];
 
   const chainAvailable = !!chain;
-  let expiryLegs: AgentOptionLeg[] = [];
-  if (chain) {
-    expiryLegs = chain.legs.filter((l) => l.ltp > 0);
-    const exact = expiryLegs.filter((l) => l.expiry === nearestExpiry);
-    if (exact.length >= 6) expiryLegs = exact;
-  }
+  const expiryLegs = chain && nearestExpiry ? selectExpiryLegs(chain, nearestExpiry) : [];
 
-  const ctx: ChainContext = {
-    spot, hv, dte, em, ivRank, trendWord, eventRisk, eventNote,
-    expiry: nearestExpiry || "~30d", live: chainAvailable,
-  };
-
-  const band = Math.max(em * 2.5, spot * 0.12);
-  let contracts: SellerContract[];
-
-  if (chainAvailable && expiryLegs.length >= 6) {
-    contracts = expiryLegs
-      .filter((l) => Math.abs(l.strike - spot) <= band)
-      .map((l) =>
-        buildContract(
-          {
-            type: l.type,
-            strike: l.strike,
-            premium: l.ltp,
-            vol: normalizeIv(l.iv, hv),
-            oi: l.oi || 0,
-            oiChange: l.change_oi || 0,
-            volume: l.volume || 0,
-            bid: l.bid,
-            ask: l.ask,
-          },
-          ctx,
-        ),
+  let contracts = chain
+    ? scoreContractsForExpiry(
+        chain,
+        nearestExpiry,
+        dte,
+        spot,
+        hv,
+        atmIv,
+        ivRank,
+        trendWord,
+        eventRisk,
+        eventNote,
+        earnings,
+        chainAvailable,
+      )
+    : scoreContractsForExpiry(
+        { legs: [] },
+        nearestExpiry,
+        dte,
+        spot,
+        hv,
+        atmIv,
+        ivRank,
+        trendWord,
+        eventRisk,
+        eventNote,
+        earnings,
+        false,
       );
-  } else {
-    // Synthetic fallback: Black-Scholes premiums at HV. Premium Edge is 0 by
-    // construction — the UI flags that live premiums are needed for edge.
-    ctx.live = false;
-    const step = spot > 1000 ? 50 : spot > 500 ? 20 : 10;
-    contracts = [];
-    for (let i = -6; i <= 6; i++) {
-      const strike = Math.round(spot / step) * step + i * step;
-      if (strike <= 0) continue;
-      for (const type of ["CE", "PE"] as const) {
-        const premium = blackScholesGreeks(spot, strike, hv, dte, type === "PE" ? "put" : "call").price;
-        if (premium < 0.5) continue;
-        contracts.push(
-          buildContract(
-            { type, strike, premium, vol: hv, oi: 0, oiChange: 0, volume: 0 },
-            ctx,
-          ),
-        );
-      }
-    }
-  }
 
-  contracts.sort((a, b) => b.seller_score - a.seller_score);
-  contracts = contracts.slice(0, 40);
+  let nextExpiryChain: {
+    expiry: string;
+    days_to_expiry: number;
+    contracts: SellerContract[];
+  } | null = null;
+
+  if (resolved.includeNextChain && resolved.nextExpiry && resolved.nextDte != null && chain) {
+    nextExpiryChain = {
+      expiry: resolved.nextExpiry,
+      days_to_expiry: resolved.nextDte,
+      contracts: scoreContractsForExpiry(
+        chain,
+        resolved.nextExpiry,
+        resolved.nextDte,
+        spot,
+        hv,
+        atmIv,
+        ivRank,
+        trendWord,
+        eventRisk,
+        eventNote,
+        earnings,
+        chainAvailable,
+      ),
+    };
+  }
 
   // Chain-level advanced stats
   const ceOi = expiryLegs.filter((l) => l.type === "CE").reduce((a, l) => a + (l.oi || 0), 0);
@@ -365,6 +469,7 @@ export async function analyzeSellerBoard(symbol: string) {
   const maxPain = computeMaxPain(expiryLegs);
 
   const smileMap = new Map<number, { strike: number; ce_iv: number | null; pe_iv: number | null }>();
+  const band = Math.max(em * 2.5, spot * 0.12);
   for (const l of expiryLegs) {
     if (!l.iv || l.iv <= 0 || Math.abs(l.strike - spot) > band) continue;
     const entry = smileMap.get(l.strike) || { strike: l.strike, ce_iv: null, pe_iv: null };
@@ -374,6 +479,29 @@ export async function analyzeSellerBoard(symbol: string) {
     smileMap.set(l.strike, entry);
   }
   const smile = [...smileMap.values()].sort((a, b) => a.strike - b.strike);
+
+  const topContract = (nextExpiryChain?.contracts[0] ?? contracts[0]);
+  let expiry_comparison = null;
+  if (topContract && chain?.expiries && chain.expiries.length >= 2) {
+    expiry_comparison = compareNearestExpiries({
+      spot,
+      strike: topContract.strike,
+      vol: normalizeIv(topContract.advanced.iv / 100, hv),
+      optionType: topContract.type === "PE" ? "put" : "call",
+      expiries: chain.expiries,
+      dteForExpiry: daysToExpiryFromNseDate,
+      premiumForExpiry: (exp) =>
+        legPremiumAtExpiry(chain.legs, topContract.strike, exp, topContract.type),
+      earnings: earnings ? { days_away: earnings.days_away, label: earnings.label } : null,
+    });
+  }
+
+  let note = chainAvailable
+    ? `Live NSE option chain (${expiryLegs.length} legs, expiry ${nearestExpiry}). IV Rank is estimated from 1-year realized-vol range.`
+    : "Live chain unavailable for this symbol — premiums estimated via Black-Scholes at historical volatility. Index symbols (NIFTY/BANKNIFTY) get full NSE chains.";
+  if (nextExpiryChain) {
+    note += ` Nearest expiry has ${dte} DTE — next expiry (${nextExpiryChain.expiry}, ${nextExpiryChain.days_to_expiry} DTE) chain included for selling.`;
+  }
 
   return {
     symbol: sym,
@@ -393,13 +521,16 @@ export async function analyzeSellerBoard(symbol: string) {
     pcr,
     max_pain: maxPain,
     chain_available: chainAvailable,
-    note: chainAvailable
-      ? `Live NSE option chain (${expiryLegs.length} legs, expiry ${nearestExpiry}). IV Rank is estimated from 1-year realized-vol range.`
-      : "Live chain unavailable for this symbol — premiums estimated via Black-Scholes at historical volatility. Index symbols (NIFTY/BANKNIFTY) get full NSE chains.",
+    expiries: chain?.expiries || [],
+    note,
     contracts,
+    next_expiry_chain: nextExpiryChain,
     smile,
     data_quality: live.quality,
     analyzed_at: new Date().toISOString(),
+    earnings_days: earnings?.days_away,
+    earnings_label: earnings?.label,
+    expiry_comparison,
   };
 }
 
@@ -432,7 +563,8 @@ export async function scanSellerUniverse(limit = 12): Promise<SellerPick[]> {
       const hvPct = hv * 100;
       const trendWord = trendToWord(detectTrend(bars), hv);
       const movement = computePriceMovement(bars);
-      const { risk: eventRisk } = detectEventRisk(bars, hv);
+      const focus = assessStockFocus({ bars, hv, earnings: await fetchUpcomingEarnings(sym) });
+      const eventRisk = focus.event_risk;
 
       let score = 0;
       const why: string[] = [];

@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -35,12 +36,21 @@ interface AppCacheContextValue {
   get: <T>(key: string) => T | undefined;
   set: (key: string, value: unknown) => void;
   clear: (key: string) => void;
+  /** False during SSR + first client paint; true after sessionStorage is loaded. */
+  ready: boolean;
 }
 
 const AppCacheContext = createContext<AppCacheContextValue | null>(null);
 
 export function AppCacheProvider({ children }: { children: ReactNode }) {
-  const [store, setStore] = useState<CacheStore>(() => readStore());
+  // Always start empty so server HTML and the first client render match (no hydration mismatch).
+  const [store, setStore] = useState<CacheStore>({});
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setStore(readStore());
+    setReady(true);
+  }, []);
 
   const get = useCallback(
     <T,>(key: string): T | undefined => store[key] as T | undefined,
@@ -64,7 +74,7 @@ export function AppCacheProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ get, set, clear }), [get, set, clear]);
+  const value = useMemo(() => ({ get, set, clear, ready }), [get, set, clear, ready]);
 
   return <AppCacheContext.Provider value={value}>{children}</AppCacheContext.Provider>;
 }

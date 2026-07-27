@@ -2,6 +2,7 @@ import type { OHLCVBar } from "@/lib/data/types";
 import { computeAtr } from "./technical";
 import { probAbove, historicalVol, normalizeIv } from "./options";
 import { assessStockFocus, type StockFocusAssessment } from "./stock-focus";
+import type { UpcomingEarnings } from "@/lib/data/earnings-calendar";
 import {
   clamp01,
   distributionConfidence,
@@ -361,6 +362,7 @@ export function computeOptionStats(input: {
   trend: string;
   optionType: "call" | "put";
   legs: { strike: number; ltp: number; iv?: number; type: string }[];
+  earnings?: UpcomingEarnings | null;
 }): OptionStatsBundle {
   const { bars, spot, daysToExpiry, atmIv, trend, optionType } = input;
   const hv20 = historicalVol(bars, 20);
@@ -475,7 +477,17 @@ export function computeOptionStats(input: {
     direction: z1m > 0.3 ? "above" : z1m < -0.3 ? "below" : "neutral",
   };
 
-  const chainLegs = input.legs.filter((l) => l.ltp > 0).slice(0, 50);
+  // Keep first occurrence per type+strike (chain may include multiple expiries).
+  const seenStrike = new Set<string>();
+  const chainLegs = input.legs
+    .filter((l) => l.ltp > 0)
+    .filter((l) => {
+      const k = `${l.type}-${l.strike}`;
+      if (seenStrike.has(k)) return false;
+      seenStrike.add(k);
+      return true;
+    })
+    .slice(0, 50);
 
   const strike_probabilities: StrikeProbability[] = chainLegs.map((leg) => {
     const type = leg.type === "PE" ? "PE" : "CE";
@@ -545,6 +557,7 @@ export function computeOptionStats(input: {
     hv: hv20,
     zScore1m: z1m,
     volRegime: volatility_regime,
+    earnings: input.earnings,
   });
 
   return {

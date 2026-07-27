@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { fetchAPI, OptionsAnalysis, OptionStatsPick } from "@/lib/api";
+import { fetchAPI, OptionsAnalysis, OptionStatsPick, OptionRec } from "@/lib/api";
 import {
   SignalBadge,
   Disclaimer,
@@ -12,6 +12,7 @@ import { Search, RefreshCw } from "lucide-react";
 import DataIntelPanel from "@/components/DataIntelPanel";
 import SellerAssistant from "@/components/SellerAssistant";
 import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
+import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -43,36 +44,117 @@ function FocusBadge({
   status,
   label,
   tags,
+  earningsLabel,
+  earningsDays,
 }: {
   status: "clean" | "caution" | "avoid";
   label: string;
   tags?: string[];
+  earningsLabel?: string;
+  earningsDays?: number;
 }) {
   const cls =
     status === "clean" ? "badge-buy" : status === "caution" ? "badge-watch" : "badge-sell";
+  const title = [
+    tags?.join(" · "),
+    earningsLabel && earningsDays != null ? `Results ${earningsLabel} (${earningsDays}d)` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ") || label;
   return (
-    <span className={cls} title={tags?.join(" · ") || label}>
-      {label}
-    </span>
+    <div>
+      <span className={cls} title={title}>
+        {label}
+      </span>
+      {earningsLabel && earningsDays != null && earningsDays <= 45 && (
+        <p className="mt-0.5 font-mono text-[0.625rem] tabular-nums" style={{ color: "var(--fg-muted)" }}>
+          {earningsLabel} · {earningsDays}d
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StrikePicksTable({ picks }: { picks: OptionRec[] }) {
+  if (picks.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+        No qualifying strikes for this expiry and strategy.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Strike</th>
+            <th>Action</th>
+            <th>Premium</th>
+            <th>IV</th>
+            <th>Theta/day</th>
+            <th>7d Decay</th>
+            <th>Delta</th>
+            <th>Moneyness</th>
+            <th>P(ITM)</th>
+            <th>P(OTM)</th>
+            <th>Breakeven</th>
+            <th>Stop</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {picks.map((r, i) => {
+            const isSell = r.action.includes("Sell");
+            const thetaDisplay = r.theta != null ? (isSell ? Math.abs(r.theta) : r.theta) : null;
+            return (
+              <tr key={`${r.action}-${r.strike}-${i}`}>
+                <td className="font-medium">₹{r.strike}</td>
+                <td>
+                  <SignalBadge signal={r.action.includes("Buy") ? "Buy" : r.action.includes("Sell") ? "Sell" : "Avoid"} />
+                </td>
+                <td className="font-mono tabular-nums">₹{r.premium}</td>
+                <td className="font-mono text-xs tabular-nums">{r.iv != null ? `${r.iv}%` : "—"}</td>
+                <td className="font-mono text-xs tabular-nums" style={{ color: isSell ? "var(--green)" : "var(--red)" }}>
+                  {thetaDisplay != null ? `${isSell ? "+" : ""}₹${thetaDisplay.toFixed(2)}` : "—"}
+                </td>
+                <td className="font-mono text-xs tabular-nums" style={{ color: isSell ? "var(--green)" : "var(--red)" }}>
+                  {r.theta_decay_7d != null ? `${isSell ? "+" : ""}₹${Math.abs(r.theta_decay_7d).toFixed(2)}` : "—"}
+                </td>
+                <td className="font-mono text-xs tabular-nums">{r.delta != null ? r.delta.toFixed(2) : "—"}</td>
+                <td>{r.moneyness}</td>
+                <td className="font-mono tabular-nums">{r.prob_itm}%</td>
+                <td className="font-mono tabular-nums">{r.prob_otm}%</td>
+                <td className="font-mono tabular-nums">
+                  {"breakeven" in r && r.breakeven ? `₹${r.breakeven}` : r.entry_premium ? `₹${r.entry_premium[0]}–${r.entry_premium[1]}` : "—"}
+                </td>
+                <td className="font-mono tabular-nums">{r.stop_loss ? `₹${r.stop_loss}` : "—"}</td>
+                <td className="max-w-xs truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{r.reason || "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export default function OptionsPage() {
   const cache = useAppCache();
   const cacheSet = cache.set;
-  const cached = cache.get<OptionsCache>(CACHE_KEY);
-  const [subTab, setSubTab] = useState(cache.get<string>(SUBTAB_CACHE_KEY) ?? "analysis");
-  const [symbol, setSymbol] = useState(cached?.symbol ?? "RELIANCE.NS");
-  const [optionType, setOptionType] = useState(cached?.optionType ?? "call");
-  const [strategyMode, setStrategyMode] = useState(cached?.strategyMode ?? "selling");
-  const [capital, setCapital] = useState(cached?.capital ?? 100000);
-  const [riskLevel, setRiskLevel] = useState(cached?.riskLevel ?? "medium");
-  const [analysis, setAnalysis] = useState<OptionsAnalysis | null>(cached?.analysis ?? null);
-  const [statsPicks, setStatsPicks] = useState<OptionStatsPick[]>(cached?.statsPicks ?? []);
+  // Defaults only — restore from sessionStorage after cache.ready to avoid hydration mismatch.
+  const [subTab, setSubTab] = useState("analysis");
+  const [symbol, setSymbol] = useState("RELIANCE.NS");
+  const [optionType, setOptionType] = useState("call");
+  const [strategyMode, setStrategyMode] = useState("selling");
+  const [capital, setCapital] = useState(100000);
+  const [riskLevel, setRiskLevel] = useState("medium");
+  const [analysis, setAnalysis] = useState<OptionsAnalysis | null>(null);
+  const [statsPicks, setStatsPicks] = useState<OptionStatsPick[]>([]);
   const [loading, setLoading] = useState(false);
   const [statsPicksLoading, setStatsPicksLoading] = useState(false);
   const [error, setError] = useState("");
-  const [statsPicksLoaded, setStatsPicksLoaded] = useState(cached?.statsPicksLoaded ?? false);
+  const [statsPicksLoaded, setStatsPicksLoaded] = useState(false);
   const [cleanOnly, setCleanOnly] = useState(false);
 
   const snapshotRef = useRef({
@@ -108,9 +190,29 @@ export default function OptionsPage() {
   );
 
   const statsScanningRef = useRef(false);
-  const scannedOptionTypeRef = useRef<string | null>(
-    cached?.statsPicksLoaded && (cached.statsPicks?.length ?? 0) > 0 ? cached.optionType ?? null : null,
-  );
+  const scannedOptionTypeRef = useRef<string | null>(null);
+  const [cacheRestored, setCacheRestored] = useState(false);
+
+  useEffect(() => {
+    if (!cache.ready || cacheRestored) return;
+    const sub = cache.get<string>(SUBTAB_CACHE_KEY);
+    if (sub) setSubTab(sub);
+    const saved = cache.get<OptionsCache>(CACHE_KEY);
+    if (saved) {
+      setSymbol(saved.symbol ?? "RELIANCE.NS");
+      setOptionType(saved.optionType ?? "call");
+      setStrategyMode(saved.strategyMode ?? "selling");
+      setCapital(saved.capital ?? 100000);
+      setRiskLevel(saved.riskLevel ?? "medium");
+      setAnalysis(saved.analysis ?? null);
+      setStatsPicks(saved.statsPicks ?? []);
+      setStatsPicksLoaded(saved.statsPicksLoaded ?? false);
+      if (saved.statsPicksLoaded && (saved.statsPicks?.length ?? 0) > 0) {
+        scannedOptionTypeRef.current = saved.optionType ?? null;
+      }
+    }
+    setCacheRestored(true);
+  }, [cache, cacheRestored]);
 
   const loadStatsPicks = useCallback(async () => {
     if (statsScanningRef.current) return;
@@ -118,7 +220,7 @@ export default function OptionsPage() {
     setStatsPicksLoading(true);
     try {
       const data = await fetchAPI<OptionStatsPick[]>(
-        `/api/options/stats/scan?option_type=${optionType}&limit=20`,
+        `/api/options/stats/scan?option_type=${optionType}&limit=50`,
       );
       setStatsPicks(data);
       setStatsPicksLoaded(true);
@@ -133,11 +235,12 @@ export default function OptionsPage() {
   }, [optionType, persist]);
 
   useEffect(() => {
+    if (!cacheRestored) return;
     if (subTab !== "analysis") return;
     if (scannedOptionTypeRef.current === optionType) return;
     scannedOptionTypeRef.current = optionType;
     loadStatsPicks();
-  }, [subTab, optionType, loadStatsPicks]);
+  }, [cacheRestored, subTab, optionType, loadStatsPicks]);
 
   const analyze = useCallback(async (symOverride?: string) => {
     const sym = symOverride ?? symbol;
@@ -321,7 +424,7 @@ export default function OptionsPage() {
               Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Scans liquid NIFTY names for IV edge, regime, and confidence.{" "}
+              Scans all 50 NIFTY names for IV edge, regime, and confidence.{" "}
               <strong>Focus</strong> flags news/odd activity (gaps, vol spikes, large moves). Pick{" "}
               <strong>Clean</strong> names with the highest Option Score.
             </p>
@@ -355,7 +458,7 @@ export default function OptionsPage() {
           </div>
         </div>
         {statsPicksLoading && !statsPicksLoaded ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning 30 liquid NIFTY names…</p>
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning all 50 NIFTY names…</p>
         ) : statsPicks.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
         ) : visibleStatsPicks.length === 0 ? (
@@ -394,7 +497,13 @@ export default function OptionsPage() {
                     <td className="font-mono text-xs tabular-nums" style={{ color: "var(--fg-muted)" }}>{i + 1}</td>
                     <td className="font-medium">{p.name}</td>
                     <td>
-                      <FocusBadge status={p.focus_status} label={p.focus_label} tags={p.focus_tags} />
+                      <FocusBadge
+                        status={p.focus_status}
+                        label={p.focus_label}
+                        tags={p.focus_tags}
+                        earningsLabel={p.earnings_label}
+                        earningsDays={p.earnings_days}
+                      />
                     </td>
                     <td className="font-mono tabular-nums text-base" style={{ color: p.option_score >= 60 ? "var(--green)" : p.option_score >= 45 ? "var(--accent)" : "var(--fg-primary)" }}>
                       {p.option_score}
@@ -416,7 +525,7 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-          Click a row for full analysis. Prefer <strong>Clean</strong> focus — skip <strong>News / odd</strong> unless using very wide strikes.
+          Click a row for full analysis. Prefer <strong>Clean</strong> focus — skip <strong>Results soon</strong> / <strong>News / odd</strong> unless using very wide strikes.
         </p>
       </div>
 
@@ -437,6 +546,13 @@ export default function OptionsPage() {
             <>
               <OptionsInterpretationSummary />
               <OptionsStatsDashboard analysis={analysis} />
+              {analysis.premium_decay && (
+                <PremiumDecayTimelinePanel
+                  timeline={analysis.premium_decay}
+                  comparison={analysis.expiry_comparison}
+                  title="Premium Decay Timeline — top strike pick"
+                />
+              )}
             </>
           )}
 
@@ -472,70 +588,24 @@ export default function OptionsPage() {
 
           <div className="card">
             <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-              Engine Strike Picks
+              {analysis.next_expiry_chain
+                ? `Engine Strike Picks — ${analysis.expiry} (${analysis.days_to_expiry} DTE)`
+                : "Engine Strike Picks"}
             </h3>
-            {analysis.recommendations.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
-                No qualifying strikes for this strategy given current price movement. Try adjusting strategy mode or pick a stock from the recommendations table above.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Strike</th>
-                      <th>Action</th>
-                      <th>Premium</th>
-                      <th>IV</th>
-                      <th>Theta/day</th>
-                      <th>7d Decay</th>
-                      <th>Delta</th>
-                      <th>Moneyness</th>
-                      <th>P(ITM)</th>
-                      <th>P(OTM)</th>
-                      <th>Breakeven</th>
-                      <th>Stop</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analysis.recommendations.map((r) => {
-                      const isSell = r.action.includes("Sell");
-                      const thetaDisplay = r.theta != null
-                        ? (isSell ? Math.abs(r.theta) : r.theta)
-                        : null;
-                      return (
-                      <tr key={r.strike}>
-                        <td className="font-medium">₹{r.strike}</td>
-                        <td>
-                          <SignalBadge signal={r.action.includes("Buy") ? "Buy" : r.action.includes("Sell") ? "Sell" : "Avoid"} />
-                        </td>
-                        <td className="font-mono tabular-nums">₹{r.premium}</td>
-                        <td className="font-mono text-xs tabular-nums">{r.iv != null ? `${r.iv}%` : "—"}</td>
-                        <td className="font-mono text-xs tabular-nums" style={{ color: isSell ? "var(--green)" : "var(--red)" }}>
-                          {thetaDisplay != null ? `${isSell ? "+" : ""}₹${thetaDisplay.toFixed(2)}` : "—"}
-                        </td>
-                        <td className="font-mono text-xs tabular-nums" style={{ color: isSell ? "var(--green)" : "var(--red)" }}>
-                          {r.theta_decay_7d != null
-                            ? `${isSell ? "+" : ""}₹${Math.abs(r.theta_decay_7d).toFixed(2)}`
-                            : "—"}
-                        </td>
-                        <td className="font-mono text-xs tabular-nums">{r.delta != null ? r.delta.toFixed(2) : "—"}</td>
-                        <td>{r.moneyness}</td>
-                        <td className="font-mono tabular-nums">{r.prob_itm}%</td>
-                        <td className="font-mono tabular-nums">{r.prob_otm}%</td>
-                        <td className="font-mono tabular-nums">
-                          {"breakeven" in r && r.breakeven ? `₹${r.breakeven}` : r.entry_premium ? `₹${r.entry_premium[0]}–${r.entry_premium[1]}` : "—"}
-                        </td>
-                        <td className="font-mono tabular-nums">{r.stop_loss ? `₹${r.stop_loss}` : "—"}</td>
-                        <td className="max-w-xs truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{r.reason || "—"}</td>
-                      </tr>
-                    );})}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <StrikePicksTable picks={analysis.recommendations} />
           </div>
+
+          {analysis.next_expiry_chain && (
+            <div className="card">
+              <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
+                Next expiry — {analysis.next_expiry_chain.expiry} ({analysis.next_expiry_chain.days_to_expiry} DTE)
+              </h3>
+              <p className="mb-3 text-xs" style={{ color: "var(--fg-secondary)" }}>
+                Current series has ≤10 DTE — strikes below use the next expiry chain (preferred for new premium selling).
+              </p>
+              <StrikePicksTable picks={analysis.next_expiry_chain.recommendations} />
+            </div>
+          )}
         </div>
       )}
       </>

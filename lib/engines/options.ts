@@ -4,6 +4,13 @@ import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
 import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
+import { fetchUpcomingEarnings } from "@/lib/data/earnings-calendar";
+import {
+  buildPremiumDecayTimeline,
+  compareNearestExpiries,
+  legPremiumAtExpiry,
+} from "./premium-decay";
+import { resolveOptionExpiries } from "./chain-expiry";
 import { computeOptionStats } from "./option-stats";
 import { assessStockFocus } from "./stock-focus";
 
@@ -136,6 +143,167 @@ export function probAbove(spot: number, strike: number, vol: number, days: numbe
 function moneyness(spot: number, strike: number, type: string) {
   if (type === "call") return strike < spot * 0.99 ? "ITM" : strike > spot * 1.01 ? "OTM" : "ATM";
   return strike > spot * 1.01 ? "ITM" : strike < spot * 0.99 ? "OTM" : "ATM";
+}
+
+type LiveOptionLeg = {
+  strike: number;
+  ltp: number;
+  iv?: number;
+  type: string;
+  oi?: number;
+  volume?: number;
+  bid?: number;
+  ask?: number;
+};
+
+function buildStrikeRecommendations(input: {
+  spot: number;
+  daysToExpiry: number;
+  optionType: string;
+  strategyMode: string;
+  capital: number;
+  movement: ReturnType<typeof computePriceMovement>;
+  movementInsight: ReturnType<typeof getMovementInsight>;
+  trend: string;
+  hv: number;
+  em: number;
+  step: number;
+  isSelling: boolean;
+  expiryLegs: LiveOptionLeg[];
+}): Record<string, unknown>[] {
+  const {
+    spot,
+    daysToExpiry,
+    optionType,
+    capital,
+    movement,
+    movementInsight,
+    trend,
+    hv,
+    em,
+    step,
+    isSelling,
+    expiryLegs,
+  } = input;
+
+  const strikes: Record<string, unknown>[] = [];
+
+  if (expiryLegs.length >= 5) {
+    for (const leg of expiryLegs) {
+      const s = leg.strike;
+      const premium = leg.ltp;
+      const vol = normalizeIv(leg.iv, hv);
+      const probItm = optionType === "call" ? probAbove(spot, s, vol, daysToExpiry) : 100 - probAbove(spot, s, vol, daysToExpiry);
+      const probOtm = Math.round((100 - probItm) * 10) / 10;
+      const money = moneyness(spot, s, optionType);
+      let score = 0;
+      if ((trend === "uptrend" && optionType === "call") || (trend === "downtrend" && optionType === "put")) score += 30;
+      if (money === "ATM" || money === "ITM") score += 25;
+      if (probItm > 40 && probItm < 70) score += 15;
+      if (premium < capital * 0.02) score += 10;
+      if (movementInsight.suitability === "favorable") score += 10;
+      if ((leg.oi || 0) > 1000) score += 5;
+      if (vol > hv * 1.1 && isSelling) score += 10;
+
+      const rec: Record<string, unknown> = {
+        strike: s,
+        premium,
+        moneyness: money,
+        iv: Math.round(vol * 1000) / 10,
+        prob_itm: probItm,
+        prob_otm: probOtm,
+        volume: leg.volume || 0,
+        open_interest: leg.oi || 0,
+        bid_ask_spread_pct: leg.bid && leg.ask ? Math.round(((leg.ask - leg.bid) / premium) * 1000) / 10 : null,
+        liquidity_ok: (leg.oi || 0) > 500 || (leg.volume || 0) > 100,
+        score,
+        live: true,
+      };
+      attachGreeks(rec, spot, optionType, daysToExpiry, vol);
+
+      const liquidityOk = rec.liquidity_ok as boolean;
+      if (isSelling) {
+        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8 && liquidityOk) {
+          rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
+          rec.premium_received = premium;
+          rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
+          rec.stop_loss = Math.round(premium * 2 * 100) / 100;
+          rec.reason = `Live NSE LTP ₹${premium}, OI ${leg.oi ?? "—"}, P(OTM) ${probOtm}% (≥70), dist≥0.8×EM.`;
+          rec.invalidation = optionType === "call"
+            ? `Spot closes above ₹${rec.breakeven} on expiry`
+            : `Spot closes below ₹${rec.breakeven} on expiry`;
+          rec.max_risk = "Undefined for naked selling — use spreads";
+          strikes.push(rec);
+        }
+      } else if (score >= 65 && liquidityOk && movementInsight.suitability !== "avoid") {
+        rec.action = `Buy ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
+        rec.entry_premium = [Math.round(premium * 0.95 * 100) / 100, Math.round(premium * 1.05 * 100) / 100];
+        rec.stop_loss = Math.round(premium * 0.5 * 100) / 100;
+        rec.target = Math.round(premium * 2 * 100) / 100;
+        rec.reason = `Live NSE LTP ₹${premium} · score ${score}≥65 · ${trend} · 15d ${movement.days_15}%`;
+        rec.invalidation = `Premium below ₹${rec.stop_loss}`;
+        strikes.push(rec);
+      }
+    }
+  } else {
+    for (let s = Math.floor(spot / step) * step - step * 5; s <= Math.ceil(spot / step) * step + step * 5; s += step) {
+      if (s <= 0) continue;
+      const dist = Math.abs(s - spot);
+      const premium = Math.max(1, Math.round((em * Math.exp(-dist / em) * 0.15) * 100) / 100);
+      const iv = hv;
+      const probItm = optionType === "call" ? probAbove(spot, s, iv, daysToExpiry) : 100 - probAbove(spot, s, iv, daysToExpiry);
+      const probOtm = Math.round((100 - probItm) * 10) / 10;
+      const money = moneyness(spot, s, optionType);
+      let score = 0;
+      if ((trend === "uptrend" && optionType === "call") || (trend === "downtrend" && optionType === "put")) score += 30;
+      if (money === "ATM" || money === "ITM") score += 25;
+      if (probItm > 40 && probItm < 70) score += 15;
+      if (premium < capital * 0.02) score += 10;
+      if (movementInsight.suitability === "favorable") score += 10;
+      if (iv > hv * 1.1 && isSelling) score += 10;
+
+      const rec: Record<string, unknown> = {
+        strike: s,
+        premium,
+        moneyness: money,
+        iv: Math.round(iv * 1000) / 10,
+        prob_itm: probItm,
+        prob_otm: probOtm,
+        volume: 0,
+        open_interest: 0,
+        bid_ask_spread_pct: null,
+        liquidity_ok: false,
+        score,
+        live: false,
+      };
+      attachGreeks(rec, spot, optionType, daysToExpiry, iv);
+
+      if (isSelling) {
+        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8) {
+          rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
+          rec.premium_received = premium;
+          rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
+          rec.stop_loss = Math.round(premium * 2 * 100) / 100;
+          rec.reason = `Synthetic HV estimate — prefer live chain (NIFTY/BANKNIFTY). P(OTM) ${probOtm}%.`;
+          rec.invalidation = optionType === "call"
+            ? `Spot closes above ₹${rec.breakeven} on expiry`
+            : `Spot closes below ₹${rec.breakeven} on expiry`;
+          rec.max_risk = "Undefined for naked selling — use spreads";
+          strikes.push(rec);
+        }
+      } else if (score >= 65 && movementInsight.suitability !== "avoid") {
+        rec.action = `Buy ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
+        rec.entry_premium = [Math.round(premium * 0.95 * 100) / 100, Math.round(premium * 1.05 * 100) / 100];
+        rec.stop_loss = Math.round(premium * 0.5 * 100) / 100;
+        rec.target = Math.round(premium * 2 * 100) / 100;
+        rec.reason = `Synthetic HV estimate (score ${score}≥65) — prefer live chain (NIFTY/BANKNIFTY).`;
+        rec.invalidation = `Premium below ₹${rec.stop_loss}`;
+        strikes.push(rec);
+      }
+    }
+  }
+
+  return strikes;
 }
 
 export function getMovementInsight(
@@ -309,131 +477,76 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
   const hv = historicalVol(bars);
 
   const liveLegs = (chain?.legs || []).filter((l) => l.type === (optionType === "put" ? "PE" : "CE") && l.ltp > 0);
-  const nearestExpiry = chain?.expiries?.[0];
-  const daysToExpiry = nearestExpiry ? daysToExpiryFromNseDate(nearestExpiry) : 30;
+  const resolved = resolveOptionExpiries(chain?.expiries);
+  const nearestExpiry = resolved.nearestExpiry;
+  const daysToExpiry = resolved.nearestDte;
   const atmIv = atmIvFromLegs(chain?.legs || [], spot, hv);
   const volatility = computeVolatilityMetrics(bars, atmIv);
   const em = spot * hv * Math.sqrt(daysToExpiry / 365);
   const expectedRange: [number, number] = [Math.round((spot - em) * 100) / 100, Math.round((spot + em) * 100) / 100];
 
-  const strikes = [];
   const step = spot > 1000 ? 50 : spot > 500 ? 20 : 10;
   const isSelling = strategyMode.includes("sell") || strategyMode === "selling" || strategyMode === "neutral";
 
   const expiryLegs = nearestExpiry
-    ? liveLegs.filter((l) => l.expiry.includes(nearestExpiry.slice(0, 2)) || l.expiry === nearestExpiry || l.expiry.includes(nearestExpiry.replace(/-/g, "-")))
+    ? liveLegs.filter((l) => l.expiry === nearestExpiry)
     : liveLegs;
 
-  if (expiryLegs.length >= 5) {
-    for (const leg of expiryLegs) {
-      const s = leg.strike;
-      const premium = leg.ltp;
-      const vol = normalizeIv(leg.iv, hv);
-      const probItm = optionType === "call" ? probAbove(spot, s, vol, daysToExpiry) : 100 - probAbove(spot, s, vol, daysToExpiry);
-      const probOtm = Math.round((100 - probItm) * 10) / 10;
-      const money = moneyness(spot, s, optionType);
-      let score = 0;
-      if ((trend === "uptrend" && optionType === "call") || (trend === "downtrend" && optionType === "put")) score += 30;
-      if (money === "ATM" || money === "ITM") score += 25;
-      if (probItm > 40 && probItm < 70) score += 15;
-      if (premium < capital * 0.02) score += 10;
-      if (movementInsight.suitability === "favorable") score += 10;
-      if ((leg.oi || 0) > 1000) score += 5;
-      if (vol > hv * 1.1 && isSelling) score += 10;
+  const recInput = {
+    spot,
+    optionType,
+    strategyMode,
+    capital,
+    movement,
+    movementInsight,
+    trend,
+    hv,
+    step,
+    isSelling,
+  };
 
-      const rec: Record<string, unknown> = {
-        strike: s,
-        premium,
-        moneyness: money,
-        iv: Math.round(vol * 1000) / 10,
-        prob_itm: probItm,
-        prob_otm: probOtm,
-        volume: leg.volume || 0,
-        open_interest: leg.oi || 0,
-        bid_ask_spread_pct: leg.bid && leg.ask ? Math.round(((leg.ask - leg.bid) / premium) * 1000) / 10 : null,
-        liquidity_ok: (leg.oi || 0) > 500 || (leg.volume || 0) > 100,
-        score,
-        live: true,
-      };
-      attachGreeks(rec, spot, optionType, daysToExpiry, vol);
+  const strikes = buildStrikeRecommendations({
+    ...recInput,
+    daysToExpiry,
+    em,
+    expiryLegs,
+  });
 
-      const liquidityOk = rec.liquidity_ok as boolean;
-      if (isSelling) {
-        // Institutional sell: P(OTM)≥70 and strike ≥0.8× expected move away
-        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8 && liquidityOk) {
-          rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
-          rec.premium_received = premium;
-          rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
-          rec.stop_loss = Math.round(premium * 2 * 100) / 100;
-          rec.reason = `Live NSE LTP ₹${premium}, OI ${leg.oi ?? "—"}, P(OTM) ${probOtm}% (≥70), dist≥0.8×EM.`;
-          rec.invalidation = optionType === "call"
-            ? `Spot closes above ₹${rec.breakeven} on expiry`
-            : `Spot closes below ₹${rec.breakeven} on expiry`;
-          rec.max_risk = "Undefined for naked selling — use spreads";
-          strikes.push(rec);
-        }
-      } else if (score >= 65 && liquidityOk && movementInsight.suitability !== "avoid") {
-        rec.action = `Buy ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
-        rec.entry_premium = [Math.round(premium * 0.95 * 100) / 100, Math.round(premium * 1.05 * 100) / 100];
-        rec.stop_loss = Math.round(premium * 0.5 * 100) / 100;
-        rec.target = Math.round(premium * 2 * 100) / 100;
-        rec.reason = `Live NSE LTP ₹${premium} · score ${score}≥65 · ${trend} · 15d ${movement.days_15}%`;
-        rec.invalidation = `Premium below ₹${rec.stop_loss}`;
-        strikes.push(rec);
-      }
-    }
-  } else {
-    for (let s = Math.floor(spot / step) * step - step * 5; s <= Math.ceil(spot / step) * step + step * 5; s += step) {
-      if (s <= 0) continue;
-      const dist = Math.abs(s - spot);
-      const premium = Math.max(1, Math.round((em * Math.exp(-dist / em) * 0.15) * 100) / 100);
-      const iv = hv;
-      const probItm = optionType === "call" ? probAbove(spot, s, iv, daysToExpiry) : 100 - probAbove(spot, s, iv, daysToExpiry);
-      const probOtm = Math.round((100 - probItm) * 10) / 10;
-      const money = moneyness(spot, s, optionType);
-      let score = 0;
-      if ((trend === "uptrend" && optionType === "call") || (trend === "downtrend" && optionType === "put")) score += 30;
-      if (money === "ATM" || money === "ITM") score += 25;
-      if (probItm > 40 && probItm < 70) score += 15;
-      if (premium < capital * 0.02) score += 10;
-      if (movementInsight.suitability === "favorable") score += 10;
+  let nextExpiryChain: {
+    expiry: string;
+    days_to_expiry: number;
+    recommendations: Record<string, unknown>[];
+  } | null = null;
 
-      const rec: Record<string, unknown> = {
-        strike: s, premium, moneyness: money, iv: Math.round(iv * 1000) / 10,
-        prob_itm: probItm, prob_otm: probOtm, volume: 0, open_interest: 0,
-        bid_ask_spread_pct: null, liquidity_ok: false, score, live: false,
-      };
-      attachGreeks(rec, spot, optionType, daysToExpiry, iv);
-
-      if (isSelling) {
-        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8) {
-          rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
-          rec.premium_received = premium;
-          rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
-          rec.stop_loss = Math.round(premium * 2 * 100) / 100;
-          rec.reason = `Synthetic estimate — P(OTM) ${probOtm}% · verify live NSE chain before trading.`;
-          rec.invalidation = optionType === "call"
-            ? `Spot closes above ₹${rec.breakeven} on expiry`
-            : `Spot closes below ₹${rec.breakeven} on expiry`;
-          rec.max_risk = "Undefined for naked selling — use spreads";
-          strikes.push(rec);
-        }
-      } else if (score >= 65 && movementInsight.suitability === "favorable") {
-        rec.action = `Buy ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
-        rec.entry_premium = [Math.round(premium * 0.95 * 100) / 100, Math.round(premium * 1.05 * 100) / 100];
-        rec.stop_loss = Math.round(premium * 0.5 * 100) / 100;
-        rec.target = Math.round(premium * 2 * 100) / 100;
-        rec.reason = `Synthetic HV estimate (score ${score}≥65) — prefer live chain (NIFTY/BANKNIFTY).`;
-        rec.invalidation = `Premium below ₹${rec.stop_loss}`;
-        strikes.push(rec);
-      }
-    }
+  if (resolved.includeNextChain && resolved.nextExpiry && resolved.nextDte != null) {
+    const nextLegs = liveLegs.filter((l) => l.expiry === resolved.nextExpiry);
+    const nextEm = spot * hv * Math.sqrt(resolved.nextDte / 365);
+    const nextStrikes = buildStrikeRecommendations({
+      ...recInput,
+      daysToExpiry: resolved.nextDte,
+      em: nextEm,
+      expiryLegs: nextLegs,
+    });
+    nextStrikes.sort((a, b) => (b.score as number) - (a.score as number));
+    nextExpiryChain = {
+      expiry: resolved.nextExpiry,
+      days_to_expiry: resolved.nextDte,
+      recommendations: nextStrikes.slice(0, 10) as Record<string, unknown>[],
+    };
   }
 
   strikes.sort((a, b) => (b.score as number) - (a.score as number));
   const top = strikes.slice(0, 10);
   const chainAvailable = !!chain?.ok && (chain.legs?.length || 0) > 0;
 
+  const statsUseNext = resolved.includeNextChain && isSelling && !!nextExpiryChain;
+  const statsExpiry = statsUseNext ? resolved.nextExpiry! : nearestExpiry;
+  const statsDte = statsUseNext ? resolved.nextDte! : daysToExpiry;
+  const statsLegsSource = statsUseNext
+    ? liveLegs.filter((l) => l.expiry === statsExpiry)
+    : expiryLegs.length
+      ? expiryLegs
+      : liveLegs;
   let strategy = null;
   if (strategyMode === "neutral" && movementInsight.suitability !== "avoid") {
     strategy = {
@@ -500,17 +613,69 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
   const stats = computeOptionStats({
     bars,
     spot,
-    daysToExpiry,
+    daysToExpiry: statsDte,
     atmIv,
     trend,
     optionType: optionType as "call" | "put",
-    legs: (chain?.legs || []).map((l) => ({
+    legs: statsLegsSource.map((l) => ({
       strike: l.strike,
       ltp: l.ltp,
       iv: l.iv,
       type: l.type,
     })),
+    earnings: await fetchUpcomingEarnings(sym),
   });
+
+  const earnings = stats.focus.earnings;
+  const decaySource =
+    statsUseNext && nextExpiryChain?.recommendations.length
+      ? nextExpiryChain.recommendations
+      : top;
+  const decayDte = statsUseNext && nextExpiryChain ? nextExpiryChain.days_to_expiry : daysToExpiry;
+  const decayExpiry =
+    statsUseNext && nextExpiryChain ? nextExpiryChain.expiry : nearestExpiry || "N/A";
+  const topRec = decaySource[0] as Record<string, unknown> | undefined;
+  let premium_decay = null;
+  let expiry_comparison = null;
+
+  if (topRec?.strike) {
+    const strike = topRec.strike as number;
+    const vol = normalizeIv((topRec.iv as number) / 100 || atmIv, hv);
+    premium_decay = buildPremiumDecayTimeline({
+      spot,
+      strike,
+      vol,
+      daysToExpiry: decayDte,
+      optionType: optionType as "call" | "put",
+      livePremium: topRec.premium as number,
+      expiry: decayExpiry,
+      earnings,
+    });
+
+    if (chain?.expiries && chain.expiries.length >= 2) {
+      const legType = optionType === "put" ? "PE" : "CE";
+      expiry_comparison = compareNearestExpiries({
+        spot,
+        strike,
+        vol,
+        optionType: optionType as "call" | "put",
+        expiries: chain.expiries,
+        dteForExpiry: daysToExpiryFromNseDate,
+        premiumForExpiry: (exp) => legPremiumAtExpiry(chain.legs, strike, exp, legType),
+        earnings,
+      });
+    }
+  }
+
+  let note = chainAvailable
+    ? `Live NSE option chain via stock-nse-india (${chain!.legs.length} legs). Multi-agent spot consensus.`
+    : "Live premiums unavailable for this symbol — estimates use HV. Index symbols (NIFTY/BANKNIFTY) get full NSE chains.";
+  if (nextExpiryChain) {
+    note += ` Nearest expiry has ${daysToExpiry} DTE — next expiry (${nextExpiryChain.expiry}, ${nextExpiryChain.days_to_expiry} DTE) chain added below.`;
+  }
+  if (statsUseNext && statsExpiry) {
+    note += ` Strike stats use next expiry (${statsExpiry}) for selling with limited runway on the current series.`;
+  }
 
   return {
     symbol: sym,
@@ -529,9 +694,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     recommendations: top,
     strategy,
     chain_available: chainAvailable,
-    note: chainAvailable
-      ? `Live NSE option chain via stock-nse-india (${chain!.legs.length} legs). Multi-agent spot consensus.`
-      : "Live premiums unavailable for this symbol — estimates use HV. Index symbols (NIFTY/BANKNIFTY) get full NSE chains.",
+    note,
     data_quality: live.quality,
     advantages,
     mode_details,
@@ -543,6 +706,9 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     agents_ms: live.agents_ms,
     analyzed_at: new Date().toISOString(),
     stats,
+    premium_decay,
+    expiry_comparison,
+    next_expiry_chain: nextExpiryChain,
   };
 }
 
@@ -627,6 +793,9 @@ export interface OptionStatsPick {
   focus_tags: string[];
   focus_note: string;
   event_risk: "low" | "elevated";
+  earnings_date?: string;
+  earnings_days?: number;
+  earnings_label?: string;
 }
 
 function regimeScoreBonus(regime: string) {
@@ -638,10 +807,10 @@ function regimeScoreBonus(regime: string) {
 }
 
 /** Rank liquid names by statistical option-selling score (vol, regime, confidence, stretch). */
-export async function scanOptionStatsUniverse(optionType = "call", limit = 20): Promise<OptionStatsPick[]> {
-  const liquid = NIFTY_50.slice(0, 30);
+export async function scanOptionStatsUniverse(optionType = "call", limit = 50): Promise<OptionStatsPick[]> {
+  const liquid = NIFTY_50;
 
-  const results = await mapPool(liquid, 6, async (sym) => {
+  const results = await mapPool(liquid, 8, async (sym) => {
     try {
       const { bars } = await getPriceHistory(sym, 280);
       if (bars.length < 40) return null;
@@ -656,6 +825,7 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
         trend,
         optionType: optionType as "call" | "put",
         legs: [],
+        earnings: await fetchUpcomingEarnings(sym),
       });
 
       const z1m = stats.distributions.find((d) => d.key === "1m")?.z_score ?? 0;
@@ -676,15 +846,8 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
       if (Math.abs(z1m) < 1) why.push("price near mean");
       else if (Math.abs(z1m) >= 1.5) why.push(`stretched ${z1m > 0 ? "+" : ""}${z1m}σ`);
 
-      const focus = assessStockFocus({
-        bars,
-        hv,
-        zScore1m: z1m,
-        volRegime: stats.volatility_regime,
-      });
+      const focus = stats.focus;
 
-      if (focus.status === "avoid") optionScore -= 25;
-      else if (focus.status === "caution") optionScore -= 10;
       optionScore = Math.round(Math.min(100, Math.max(0, optionScore)));
 
       return {
@@ -705,6 +868,9 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 20): 
         focus_tags: focus.tags,
         focus_note: focus.note,
         event_risk: focus.event_risk,
+        earnings_date: focus.earnings?.date,
+        earnings_days: focus.earnings?.days_away,
+        earnings_label: focus.earnings?.label,
       };
     } catch {
       return null;

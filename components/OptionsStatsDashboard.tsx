@@ -168,27 +168,48 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
 
   return (
     <div className="page-stack">
-      {focus && focus.status !== "clean" && (
+      {(focus && focus.status !== "clean") || (focus?.earnings && focus.earnings.days_away <= 21) ? (
         <div
           className="card"
           style={{
-            borderColor: focus.status === "avoid" ? "rgba(220,38,38,0.35)" : "rgba(201,162,39,0.35)",
-            background: focus.status === "avoid" ? "var(--red-muted)" : "var(--amber-muted)",
+            borderColor:
+              focus!.status === "avoid" || (focus!.earnings && focus!.earnings.days_away <= 10)
+                ? "rgba(220,38,38,0.35)"
+                : "rgba(201,162,39,0.35)",
+            background:
+              focus!.status === "avoid" || (focus!.earnings && focus!.earnings.days_away <= 10)
+                ? "var(--red-muted)"
+                : "var(--amber-muted)",
           }}
         >
-          <p className="text-sm font-medium" style={{ color: focus.status === "avoid" ? "var(--red)" : "var(--amber)" }}>
-            Focus: {focus.label}
-            {focus.tags.length > 0 && (
+          <p
+            className="text-sm font-medium"
+            style={{
+              color:
+                focus!.status === "avoid" || (focus!.earnings && focus!.earnings.days_away <= 10)
+                  ? "var(--red)"
+                  : "var(--amber)",
+            }}
+          >
+            Focus: {focus!.label}
+            {focus!.tags.length > 0 && (
               <span className="ml-2 font-normal text-xs" style={{ color: "var(--fg-secondary)" }}>
-                {focus.tags.join(" · ")}
+                {focus!.tags.join(" · ")}
               </span>
             )}
           </p>
           <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--fg-secondary)" }}>
-            {focus.note}
+            {focus!.note}
           </p>
+          {focus!.earnings && focus!.earnings.days_away <= 45 && (
+            <p className="mt-2 text-xs font-mono" style={{ color: "var(--fg-secondary)" }}>
+              Results: {focus!.earnings.label} · {focus!.earnings.days_away} day
+              {focus!.earnings.days_away === 1 ? "" : "s"} away
+              {focus!.earnings.is_estimate ? " (estimated date)" : ""}
+            </p>
+          )}
         </div>
-      )}
+      ) : null}
 
       {/* Top row */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -445,8 +466,8 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
                 </tr>
               </thead>
               <tbody>
-                {stats.strike_probabilities.map((s) => (
-                  <tr key={`${s.type}-${s.strike}`}>
+                {stats.strike_probabilities.map((s, i) => (
+                  <tr key={`${s.type}-${s.strike}-${i}`}>
                     <td className="font-medium">₹{s.strike}</td>
                     <td>{s.type}</td>
                     <td className="font-mono tabular-nums">₹{s.premium}</td>

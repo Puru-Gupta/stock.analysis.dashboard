@@ -1,4 +1,5 @@
 import type { OHLCVBar } from "@/lib/data/types";
+import type { UpcomingEarnings } from "@/lib/data/earnings-calendar";
 import { historicalVol } from "./options";
 
 export type FocusStatus = "clean" | "caution" | "avoid";
@@ -9,6 +10,7 @@ export interface StockFocusAssessment {
   tags: string[];
   note: string;
   event_risk: "low" | "elevated";
+  earnings?: UpcomingEarnings | null;
 }
 
 function pctMove(a: number, b: number) {
@@ -22,8 +24,9 @@ export function assessStockFocus(input: {
   hv: number;
   zScore1m?: number;
   volRegime?: string;
+  earnings?: UpcomingEarnings | null;
 }): StockFocusAssessment {
-  const { bars, hv, zScore1m = 0, volRegime } = input;
+  const { bars, hv, zScore1m = 0, volRegime, earnings } = input;
   const tags: string[] = [];
   let severity = 0;
 
@@ -87,6 +90,20 @@ export function assessStockFocus(input: {
     severity += volRegime === "Extreme" ? 2 : 1;
   }
 
+  if (earnings) {
+    const est = earnings.is_estimate ? " (est.)" : "";
+    if (earnings.days_away <= 10) {
+      tags.push(`Results in ${earnings.days_away}d (${earnings.label})`);
+      severity += 4;
+    } else if (earnings.days_away <= 21) {
+      tags.push(`Results ${earnings.label}${est}`);
+      severity += 2;
+    } else if (earnings.days_away <= 45) {
+      tags.push(`Results ${earnings.label}${est}`);
+      severity += 1;
+    }
+  }
+
   const hasNewsSignature = tags.some((t) =>
     ["Vol spike", "Large 1d move", "Gap open", "Volume surge"].includes(t),
   );
@@ -104,13 +121,13 @@ export function assessStockFocus(input: {
 
   if (severity >= 4 || (hasNewsSignature && severity >= 2)) {
     status = "avoid";
-    label = "News / odd";
+    label = earnings && earnings.days_away <= 21 ? "Results soon" : "News / odd";
     note = tags.length
-      ? `${tags.slice(0, 3).join(" · ")} — avoid or use wider strikes until activity settles.`
+      ? `${tags.slice(0, 4).join(" · ")} — avoid or use wider strikes until after the event.`
       : "Abnormal activity detected — treat as event risk.";
-  } else if (severity >= 1) {
+  } else if (severity >= 1 || (earnings && earnings.days_away <= 21)) {
     status = "caution";
-    label = "Caution";
+    label = earnings && earnings.days_away <= 21 ? "Results soon" : "Caution";
     note = `${tags.join(" · ")} — possible news or event; confirm before selling near strikes.`;
   }
 
@@ -119,7 +136,8 @@ export function assessStockFocus(input: {
     label,
     tags: [...new Set(tags)],
     note,
-    event_risk,
+    event_risk: status === "clean" ? "low" : "elevated",
+    earnings: earnings ?? null,
   };
 }
 
