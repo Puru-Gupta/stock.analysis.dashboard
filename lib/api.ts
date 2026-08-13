@@ -441,3 +441,118 @@ export interface MarketOverview {
   sector_avg_score: number;
   updated_at: string;
 }
+
+export type RebalanceGoal = "growth" | "balanced" | "income" | "defensive";
+export type AnalysisBias = "balanced" | "fundamental" | "technical" | "adaptive";
+export type PortfolioSignal = "BUY" | "HOLD" | "SELL";
+
+export type LookbackMonths = 12 | 24 | 48;
+
+export interface RebalancePick {
+  symbol: string;
+  name: string;
+  sector?: string;
+  signal: PortfolioSignal;
+  composite_score: number;
+  technical_score: number;
+  fundamental_score: number;
+  current_price: number;
+  atr: number;
+  atr_stop: number;
+  target_weight_pct: number;
+  suggested_amount: number;
+  suggested_qty: number;
+  risk_reward: number;
+  trend: string;
+  thesis: string;
+  rank: number;
+}
+
+export interface RebalanceScanResult {
+  month_label: string;
+  goal: RebalanceGoal;
+  universe: string;
+  analysis_bias: AnalysisBias;
+  lookback_months: LookbackMonths;
+  monthly_capital: number;
+  regime: { label: string; state: string; detail: string };
+  picks: RebalancePick[];
+  watchlist: RebalancePick[];
+  scanned: number;
+  note: string;
+  analyzed_at: string;
+}
+
+export interface PortfolioRow {
+  id: string;
+  symbol: string;
+  name: string;
+  quantity: number;
+  entry_price: number;
+  entry_date: string;
+  current_price: number;
+  market_value: number;
+  invested: number;
+  pnl: number;
+  pnl_pct: number;
+  weight_pct: number;
+  atr: number;
+  atr_stop: number;
+  trailing_stop: boolean;
+  stop_distance_pct: number;
+  signal: PortfolioSignal;
+  composite_score: number;
+  rank: number | null;
+  reasons: string[];
+}
+
+export interface PortfolioEvaluateResult {
+  holdings: PortfolioRow[];
+  summary: {
+    invested: number;
+    current_value: number;
+    pnl: number;
+    pnl_pct: number;
+    holdings_count: number;
+  };
+  benchmarks: { label: string; return_pct: number; since: string }[];
+  new_buy_ideas: RebalancePick[];
+  stop_updates: { id: string; atr_stop: number; peak_price: number }[];
+  scan: RebalanceScanResult | null;
+  analyzed_at: string;
+}
+
+export interface BacktestPoint {
+  date: string;
+  portfolio_value: number;
+  benchmark_value: number;
+  drawdown_pct: number;
+}
+
+export interface BacktestResult {
+  lookback_months: LookbackMonths;
+  universe: string;
+  monthly_capital: number;
+  start_date: string;
+  end_date: string;
+  total_return_pct: number;
+  benchmark_return_pct: number;
+  max_drawdown_pct: number;
+  rebalance_count: number;
+  stop_out_count: number;
+  win_rate_pct: number;
+  equity_curve: BacktestPoint[];
+  note: string;
+  analyzed_at: string;
+}
+
+export interface PortfolioSnapshotRow {
+  id: number;
+  client_id: string;
+  invested: number;
+  current_value: number;
+  pnl: number;
+  pnl_pct: number;
+  holdings_count: number;
+  snapshot_at: string;
+}

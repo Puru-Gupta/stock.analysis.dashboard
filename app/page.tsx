@@ -24,6 +24,7 @@ import {
   ArrowRight,
   Activity,
   RefreshCw,
+  Scale,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAppCache } from "@/components/AppCacheProvider";
@@ -56,6 +57,13 @@ const MODULES = [
     desc: "Trend + volatility strategies",
     icon: LineChart,
     color: "var(--amber)",
+  },
+  {
+    href: "/rebalancing",
+    label: "Rebalancing",
+    desc: "Monthly picks, ATR stops, virtual portfolio",
+    icon: Scale,
+    color: "var(--accent)",
   },
   {
     href: "/dashboard",

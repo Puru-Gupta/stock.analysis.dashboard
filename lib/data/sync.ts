@@ -147,6 +147,24 @@ export async function syncPriceHistory(symbol: string): Promise<SyncResult> {
   };
 }
 
+/** Ensure DB has at least `days` of history; back-fills from Yahoo if needed. */
+export async function ensureHistoryDepth(symbol: string, days: number): Promise<void> {
+  const db = getSupabase();
+  const cutoff = daysAgo(days);
+  if (db) {
+    const { data } = await db
+      .from("price_bars")
+      .select("bar_date")
+      .eq("symbol", symbol)
+      .order("bar_date", { ascending: true })
+      .limit(1);
+    const oldest = data?.[0]?.bar_date as string | undefined;
+    if (oldest && oldest <= cutoff) return;
+  }
+  const bars = await fetchYahooBars(symbol, cutoff);
+  if (bars.length) await upsertBars(symbol, bars);
+}
+
 /** Get price history — syncs incrementally first, then returns from DB. */
 export async function getPriceHistory(symbol: string, days = 365): Promise<{ bars: OHLCVBar[]; sync: SyncResult }> {
   const sync = await syncPriceHistory(symbol);

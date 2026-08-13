@@ -14,6 +14,7 @@ import {
   Sun,
   X,
   Activity,
+  Scale,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/equity", label: "Equity", icon: TrendingUp },
   { href: "/options", label: "Options", icon: Layers },
   { href: "/futures", label: "Futures", icon: LineChart },
+  { href: "/rebalancing", label: "Rebalancing", icon: Scale },
   { href: "/dashboard", label: "Risk Dashboard", icon: Activity },
 ];
 

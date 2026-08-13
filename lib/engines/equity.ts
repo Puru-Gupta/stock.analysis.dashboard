@@ -33,15 +33,16 @@ export async function analyzeEquity(
   symbol: string,
   timeframe = "daily",
   niftyBarsCache?: Awaited<ReturnType<typeof fetchLiveMarketBundle>>["bars"],
+  days = 365,
 ) {
   const sym = normalizeSymbol(symbol);
-  const live = await fetchLiveMarketBundle(sym, { days: 365 });
+  const live = await fetchLiveMarketBundle(sym, { days });
   const bars = live.bars;
   if (!bars.length) return { error: `No price data for ${sym}`, symbol: sym };
 
   const resampled = resampleBars(bars, timeframe);
   const niftyBars =
-    niftyBarsCache ?? (await fetchLiveMarketBundle(INDEX_SYMBOL, { days: 365 })).bars;
+    niftyBarsCache ?? (await fetchLiveMarketBundle(INDEX_SYMBOL, { days })).bars;
   const niftyResampled = resampleBars(niftyBars, timeframe);
 
   const technical = computeTechnicalScores(resampled, niftyResampled);
@@ -153,6 +154,7 @@ export async function analyzeEquity(
     support: technical.support,
     resistance: technical.resistance,
     current_price: technical.current_price,
+    atr: technical.atr,
     trend: technical.trend,
     fundamentals: fundData,
     index_regime: regime,
