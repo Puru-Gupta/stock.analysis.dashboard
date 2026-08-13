@@ -635,7 +635,7 @@ export default function SellerAssistant() {
                   <th>Trend</th>
                   <th>15d Move</th>
                   <th>HV</th>
-                  <th>Why</th>
+                  <th className="table-cell-note">Why</th>
                 </tr>
               </thead>
               <tbody>
@@ -650,7 +650,7 @@ export default function SellerAssistant() {
                       {p.days_15 > 0 ? "+" : ""}{p.days_15}%
                     </td>
                     <td className="font-mono text-xs tabular-nums">{p.hv}%</td>
-                    <td className="max-w-[240px] truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{p.reason}</td>
+                    <td className="table-cell-note">{p.reason || "—"}</td>
                   </tr>
                 ))}
               </tbody>

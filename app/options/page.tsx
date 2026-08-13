@@ -100,7 +100,7 @@ function StrikePicksTable({ picks }: { picks: OptionRec[] }) {
             <th>P(OTM)</th>
             <th>Breakeven</th>
             <th>Stop</th>
-            <th>Reason</th>
+            <th className="table-cell-note">Reason</th>
           </tr>
         </thead>
         <tbody>
@@ -129,7 +129,7 @@ function StrikePicksTable({ picks }: { picks: OptionRec[] }) {
                   {"breakeven" in r && r.breakeven ? `₹${r.breakeven}` : r.entry_premium ? `₹${r.entry_premium[0]}–${r.entry_premium[1]}` : "—"}
                 </td>
                 <td className="font-mono tabular-nums">{r.stop_loss ? `₹${r.stop_loss}` : "—"}</td>
-                <td className="max-w-xs truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{r.reason || "—"}</td>
+                <td className="table-cell-note">{r.reason || "—"}</td>
               </tr>
             );
           })}
@@ -481,7 +481,7 @@ export default function OptionsPage() {
                   <th>Conf.</th>
                   <th>Z (1M)</th>
                   <th>Trend</th>
-                  <th>Why</th>
+                  <th className="table-cell-note">Why</th>
                 </tr>
               </thead>
               <tbody>
@@ -517,7 +517,7 @@ export default function OptionsPage() {
                       {p.z_score_1m > 0 ? "+" : ""}{p.z_score_1m}
                     </td>
                     <td className="text-xs">{p.trend_label}</td>
-                    <td className="max-w-[180px] truncate text-xs" style={{ color: "var(--fg-secondary)" }}>{p.reason}</td>
+                    <td className="table-cell-note">{p.reason || "—"}</td>
                   </tr>
                 ))}
               </tbody>

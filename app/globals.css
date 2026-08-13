@@ -330,6 +330,12 @@ h1, h2, h3, h4, h5, h6 {
     white-space: nowrap;
   }
 
+  .data-table td.table-cell-note,
+  .data-table th.table-cell-note {
+    white-space: normal;
+    min-width: 9rem;
+  }
+
   .data-table td.max-w-xs {
     max-width: 10rem;
   }
@@ -707,6 +713,19 @@ label, .field-label {
 
 .data-table td {
   @apply py-3 pr-4;
+}
+
+/* Readable wrapped text in narrow table columns (Reason / Why / Thesis) */
+.data-table td.table-cell-note,
+.data-table th.table-cell-note {
+  min-width: 11rem;
+  max-width: 22rem;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.45;
+  color: var(--fg-primary);
+  font-size: 0.75rem;
+  opacity: 0.88;
 }
 
 /* ── Stat tiles ── */

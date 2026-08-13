@@ -69,7 +69,7 @@ function PickRow({
       <td className="font-mono text-xs tabular-nums">₹{pick.suggested_amount.toLocaleString("en-IN")}</td>
       <td className="font-mono text-xs tabular-nums">{pick.suggested_qty}</td>
       <td className="font-mono text-xs tabular-nums" style={{ color: "var(--red)" }}>₹{pick.atr_stop}</td>
-      <td className="max-w-[200px] truncate text-xs" style={{ color: "var(--fg-secondary)" }} title={pick.thesis}>
+      <td className="max-w-[200px] table-cell-note" title={pick.thesis}>
         {pick.thesis}
       </td>
       <td>
@@ -430,7 +430,7 @@ export default function RebalancingPage() {
                     <th>₹ Deploy</th>
                     <th>Qty</th>
                     <th>ATR stop</th>
-                    <th>Thesis</th>
+                    <th className="table-cell-note">Thesis</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -586,7 +586,7 @@ export default function RebalancingPage() {
                           <td>
                             <ScoreBar score={h.composite_score} />
                           </td>
-                          <td className="max-w-[180px] truncate text-xs" style={{ color: "var(--fg-secondary)" }} title={h.reasons.join(" · ")}>
+                          <td className="table-cell-note" title={h.reasons.join(" · ")}>
                             {h.reasons.join(" · ")}
                           </td>
                           <td>
