@@ -226,6 +226,8 @@ export default function RebalancingPage() {
         universe,
         lookback_months: String(lookbackMonths),
         monthly_capital: String(monthlyCapital),
+        goal,
+        analysis_bias: analysisBias,
       });
       const data = await fetchAPI<BacktestResult>(`/api/rebalancing/backtest?${q}`);
       setBacktest(data);
@@ -235,7 +237,7 @@ export default function RebalancingPage() {
     } finally {
       setLoadingBacktest(false);
     }
-  }, [universe, lookbackMonths, monthlyCapital, persist]);
+  }, [universe, lookbackMonths, monthlyCapital, goal, analysisBias, persist]);
 
   useEffect(() => {
     if (!cacheRestored) return;
@@ -667,7 +669,7 @@ export default function RebalancingPage() {
           {!backtest && !loadingBacktest && (
             <div className="card text-center">
               <p className="text-sm mb-3" style={{ color: "var(--fg-secondary)" }}>
-                Walk-forward backtest using {lookbackMonths}-month history, monthly rebalances, and trailing ATR stops.
+                Walk-forward backtest using your Goal, Bias, and {lookbackMonths}-month window. Partial rebalance keeps winners; only laggards are rotated.
               </p>
               <button type="button" className="btn-primary" onClick={runBacktest}>Run backtest</button>
             </div>
@@ -689,7 +691,7 @@ export default function RebalancingPage() {
               </div>
               <div className="card">
                 <p className="text-xs mb-3" style={{ color: "var(--fg-muted)" }}>
-                  {backtest.start_date} → {backtest.end_date} · {backtest.rebalance_count} rebalances · {backtest.stop_out_count} stop-outs
+                  {backtest.start_date} → {backtest.end_date} · {backtest.rebalance_count} rebalances · {backtest.rotation_count} rotations · {backtest.stop_out_count} stop-outs
                 </p>
                 <p className="text-xs mb-4" style={{ color: "var(--fg-secondary)" }}>{backtest.note}</p>
                 <div className="overflow-x-auto">

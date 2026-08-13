@@ -8,6 +8,8 @@ import { ATR_STOP_MULTIPLIER, lookbackMonthsToDays, parseLookbackMonths, type Lo
 const MIN_FUND_SCORE = 55;
 const MIN_TECH_SCORE = 55;
 const MAX_PER_SECTOR = 2;
+export const REBALANCE_MIN_COMPOSITE = 60;
+export const REBALANCE_MAX_PICKS = 10;
 const SCAN_CONCURRENCY = 6;
 
 export type RebalanceGoal = "growth" | "balanced" | "income" | "defensive";
@@ -198,13 +200,24 @@ function growthBonus(technicalScore: number, trend: string, rsScore?: number): n
   return b;
 }
 
-function compositeScore(
-  analysis: Awaited<ReturnType<typeof analyzeEquity>>,
+export type CompositeAnalysisInput = {
+  fundamental_score: number;
+  technical_score: number;
+  final_score: number;
+  signal: string;
+  trend: string;
+  risk_reward: number;
+  score_breakdown?: { relative_strength?: number };
+  fundamentals?: Record<string, unknown>;
+};
+
+export function compositeScore(
+  analysis: CompositeAnalysisInput | Awaited<ReturnType<typeof analyzeEquity>>,
   goal: RebalanceGoal,
   bias: AnalysisBias,
   regimeState: string,
 ): number {
-  if ("error" in analysis) return 0;
+  if (!analysis || "error" in analysis) return 0;
   if (analysis.fundamental_score < MIN_FUND_SCORE || analysis.technical_score < MIN_TECH_SCORE) return 0;
   if (analysis.signal === "Avoid") return 0;
 
@@ -229,7 +242,7 @@ function compositeScore(
   return Math.round(Math.min(100, Math.max(0, score)));
 }
 
-function atrStopLong(entry: number, atr: number) {
+export function atrStopLong(entry: number, atr: number) {
   return r2(Math.max(0, entry - atr * ATR_STOP_MULTIPLIER));
 }
 
@@ -239,7 +252,7 @@ export function trailingAtrStop(fixedStop: number, peakPrice: number, currentAtr
   return r2(Math.max(fixedStop, trail));
 }
 
-function riskParityWeights(picks: { symbol: string; atr: number; price: number }[]) {
+export function riskParityWeights(picks: { symbol: string; atr: number; price: number }[]) {
   const inv = picks.map((p) => {
     const volPct = Math.max(0.008, p.atr / Math.max(p.price, 1));
     return { symbol: p.symbol, inv: 1 / volPct };
@@ -250,7 +263,7 @@ function riskParityWeights(picks: { symbol: string; atr: number; price: number }
   return map;
 }
 
-function diversifyPicks<T extends { symbol: string; sector?: string; composite_score: number }>(
+export function diversifyPicks<T extends { symbol: string; sector?: string; composite_score: number }>(
   ranked: T[],
   target = 10,
 ): T[] {
@@ -406,7 +419,7 @@ async function indexReturnSince(since: string, indexSym: string): Promise<number
   }
 }
 
-function holdingSignal(input: {
+export function holdingSignal(input: {
   price: number;
   atrStop: number;
   compositeScore: number;

@@ -532,6 +532,8 @@ export interface BacktestPoint {
 export interface BacktestResult {
   lookback_months: LookbackMonths;
   universe: string;
+  goal: RebalanceGoal;
+  analysis_bias: AnalysisBias;
   monthly_capital: number;
   start_date: string;
   end_date: string;
@@ -540,6 +542,7 @@ export interface BacktestResult {
   max_drawdown_pct: number;
   rebalance_count: number;
   stop_out_count: number;
+  rotation_count: number;
   win_rate_pct: number;
   equity_curve: BacktestPoint[];
   note: string;
