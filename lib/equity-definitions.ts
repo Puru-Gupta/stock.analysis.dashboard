@@ -66,7 +66,7 @@ export const EQUITY_DEFINITIONS: Record<string, string> = {
   risk_level:
     "Trade risk band (Low/Medium/High) from fundamentals, R:R, and whether the idea is tech-only.",
   universe:
-    "Stock pool to scan: Nifty 50/100/500, Midcap, Smallcap, Bank Nifty, or a sector basket.",
+    "Stock pool to scan: Nifty 50/100/500, Midcap, Smallcap, Futuristic themes (AI/EV/renewables/defence/etc.), Bank Nifty, or a sector basket.",
   valuation_filter:
     "Mid/small-cap PE–PB brackets (sector-relative when mapped): Cheap / Fair / Premium. Mid/small scans default to Cheap+Fair.",
   setup_filter:

@@ -163,6 +163,9 @@ export interface ScanResult {
   pre_breakout?: boolean;
   vol_accum_breakout?: boolean;
   price_chg_15d?: number;
+  theme?: string;
+  theme_label?: string;
+  futuristic_rank_score?: number;
 }
 
 export interface VolatilityMetrics {

@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
     risk_level: p.get("risk_level") || undefined,
     setup: p.get("setup") || undefined,
     valuation,
+    theme: p.get("theme") || undefined,
+    scope: p.get("scope") || undefined,
     limit: Number(p.get("limit") || 30),
   });
   return NextResponse.json(results);

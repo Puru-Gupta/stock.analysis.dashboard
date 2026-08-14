@@ -78,6 +78,90 @@ export const SECTORS: Record<string, string[]> = {
   Realty: ["DLF.NS", "GODREJPROP.NS", "OBEROIRLTY.NS", "PRESTIGE.NS", "BRIGADE.NS", "LODHA.NS", "PHOENIXLTD.NS"],
 };
 
+/**
+ * Futuristic / multi-decade thematic baskets (liquid NSE names).
+ * Drawn from Nifty 50/100/Mid/Small — institutional-style theme sleeves, not speculative microcaps.
+ */
+export const FUTURISTIC_THEMES: Record<string, { label: string; symbols: string[] }> = {
+  ai_digital: {
+    label: "AI / Digital",
+    symbols: [
+      "TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS", "LTIM.NS",
+      "PERSISTENT.NS", "COFORGE.NS", "MPHASIS.NS", "OFSS.NS", "TATAELXSI.NS",
+      "KPITTECH.NS", "CYIENT.NS", "BIRLASOFT.NS", "NEWGEN.NS", "LATENTVIEW.NS",
+      "HAPPSTMNDS.NS", "INTELLECT.NS", "TANLA.NS", "ROUTE.NS", "NAUKRI.NS",
+    ],
+  },
+  ev_auto: {
+    label: "EV / Auto",
+    symbols: [
+      "TATAMOTORS.NS", "M&M.NS", "MARUTI.NS", "BAJAJ-AUTO.NS", "EICHERMOT.NS",
+      "HEROMOTOCO.NS", "TVSMOTOR.NS", "ASHOKLEY.NS", "ESCORTS.NS", "TIINDIA.NS",
+      "MOTHERSON.NS", "BOSCHLTD.NS", "BHARATFORG.NS", "SONACOMS.NS", "UNOMINDA.NS",
+      "EXIDEIND.NS", "ENDURANCE.NS", "CRAFTSMAN.NS", "BALKRISIND.NS", "APOLLOTYRE.NS",
+    ],
+  },
+  renewables: {
+    label: "Renewables",
+    symbols: [
+      "ADANIGREEN.NS", "ADANIENSOL.NS", "TATAPOWER.NS", "NTPC.NS", "POWERGRID.NS",
+      "NHPC.NS", "SJVN.NS", "RELIANCE.NS", "SIEMENS.NS", "ABB.NS",
+      "THERMAX.NS", "TRITURBINE.NS", "CUMMINSIND.NS", "KEI.NS", "POLYCAB.NS",
+    ],
+  },
+  defence: {
+    label: "Defence",
+    symbols: [
+      "HAL.NS", "BEL.NS", "MAZDOCK.NS", "BDL.NS", "COCHINSHIP.NS",
+      "BHEL.NS", "DATAPATTNS.NS", "SOLARINDS.NS", "MTARTECH.NS", "PARAS.NS",
+    ],
+  },
+  specialty_pharma: {
+    label: "Specialty Pharma",
+    symbols: [
+      "DIVISLAB.NS", "LAURUSLABS.NS", "SYNGENE.NS", "BIOCON.NS", "GLAND.NS",
+      "SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "LUPIN.NS", "TORNTPHARM.NS",
+      "ALKEM.NS", "AJANTPHARM.NS", "IPCALAB.NS", "MAXHEALTH.NS", "METROPOLIS.NS",
+      "LALPATHLAB.NS", "FORTIS.NS", "APOLLOHOSP.NS",
+    ],
+  },
+  electronics_ems: {
+    label: "Electronics / EMS",
+    symbols: [
+      "DIXON.NS", "KAYNES.NS", "SYRMA.NS", "AMBER.NS", "PGEL.NS",
+      "HAVELLS.NS", "VOLTAS.NS", "CROMPTON.NS", "VGUARD.NS", "HONAUT.NS",
+      "SCHNEIDER.NS", "AVALON.NS", "CLEAN.NS",
+    ],
+  },
+  platforms: {
+    label: "Platforms / Digital consumer",
+    symbols: [
+      "ZOMATO.NS", "NYKAA.NS", "PAYTM.NS", "POLICYBZR.NS", "NAUKRI.NS",
+      "DELHIVERY.NS", "TRENT.NS", "DMART.NS", "AFFLE.NS", "INDIAMART.NS",
+      "INDIGO.NS", "IRCTC.NS", "JUBLFOOD.NS",
+    ],
+  },
+};
+
+export const FUTURISTIC_THEME_KEYS = Object.keys(FUTURISTIC_THEMES);
+
+/** Flat futuristic universe (deduped). */
+export const FUTURISTIC = [
+  ...new Set(Object.values(FUTURISTIC_THEMES).flatMap((t) => t.symbols)),
+];
+
+export function resolveFuturisticTheme(symbol: string): string | undefined {
+  const sym = symbol.toUpperCase();
+  for (const [key, theme] of Object.entries(FUTURISTIC_THEMES)) {
+    if (theme.symbols.includes(sym)) return key;
+  }
+  return undefined;
+}
+
+export function futuristicThemeLabel(key: string): string {
+  return FUTURISTIC_THEMES[key]?.label || key;
+}
+
 export const NIFTY_100 = [
   ...new Set([
     ...NIFTY_50,
@@ -90,6 +174,30 @@ export const NIFTY_100 = [
 /** Liquid Nifty 500 proxy — union of Nifty 100 + Midcap + Smallcap (~250 names). */
 export const NIFTY_500 = [...new Set([...NIFTY_100, ...NIFTY_MIDCAP, ...NIFTY_SMALLCAP])];
 
+/** Intersect thematic basket with a liquid index scope. */
+export function resolveFuturisticSymbols(theme?: string, scope = "nifty500"): string[] {
+  let basket: string[];
+  if (theme && theme !== "all" && FUTURISTIC_THEMES[theme]) {
+    basket = FUTURISTIC_THEMES[theme].symbols;
+  } else {
+    basket = FUTURISTIC;
+  }
+  const scopeSet = new Set(
+    scope === "nifty50"
+      ? NIFTY_50
+      : scope === "nifty100"
+        ? NIFTY_100
+        : scope === "midcap"
+          ? NIFTY_MIDCAP
+          : scope === "smallcap"
+            ? NIFTY_SMALLCAP
+            : [...NIFTY_500, ...FUTURISTIC],
+  );
+  const intersected = basket.filter((s) => scopeSet.has(s));
+  // Thin scopes (e.g. defence ∩ Nifty 50) fall back to full theme sleeve
+  return intersected.length >= 5 ? [...new Set(intersected)] : [...new Set(basket)];
+}
+
 export const UNIVERSES: Record<string, string[]> = {
   nifty50: NIFTY_50,
   nifty100: NIFTY_100,
@@ -97,6 +205,7 @@ export const UNIVERSES: Record<string, string[]> = {
   midcap: NIFTY_MIDCAP,
   smallcap: NIFTY_SMALLCAP,
   banknifty: BANK_NIFTY,
+  futuristic: FUTURISTIC,
 };
 
 export const INDEX_SYMBOL = "^NSEI";

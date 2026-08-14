@@ -81,6 +81,10 @@ export interface EquityFilters {
   riskFilter: string;
   setupFilter: string;
   valuationFilter: string;
+  /** Futuristic theme key or "all" */
+  futuristicTheme: string;
+  /** Liquid scope for futuristic sleeve */
+  futuristicScope: string;
 }
 
 interface EquityFilterPanelProps {
@@ -97,8 +101,28 @@ const UNIVERSE_OPTIONS: PillOption[] = [
   { value: "nifty500", label: "Nifty 500" },
   { value: "midcap", label: "Midcap" },
   { value: "smallcap", label: "Smallcap" },
+  { value: "futuristic", label: "Futuristic" },
   { value: "banknifty", label: "Bank Nifty" },
   { value: "sector", label: "Sector" },
+];
+
+const FUTURISTIC_THEME_OPTIONS: PillOption[] = [
+  { value: "all", label: "All themes" },
+  { value: "ai_digital", label: "AI / Digital" },
+  { value: "ev_auto", label: "EV / Auto" },
+  { value: "renewables", label: "Renewables" },
+  { value: "defence", label: "Defence" },
+  { value: "specialty_pharma", label: "Spec. Pharma" },
+  { value: "electronics_ems", label: "Electronics" },
+  { value: "platforms", label: "Platforms" },
+];
+
+const FUTURISTIC_SCOPE_OPTIONS: PillOption[] = [
+  { value: "nifty500", label: "All liquid" },
+  { value: "nifty50", label: "Nifty 50" },
+  { value: "nifty100", label: "Nifty 100" },
+  { value: "midcap", label: "Midcap" },
+  { value: "smallcap", label: "Smallcap" },
 ];
 
 const TIMEFRAME_OPTIONS: PillOption[] = [
@@ -150,8 +174,12 @@ export default function EquityFilterPanel({
   onScan,
   loading,
 }: EquityFilterPanelProps) {
-  const { symbol, universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter } = filters;
+  const {
+    symbol, universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter,
+    futuristicTheme, futuristicScope,
+  } = filters;
   const showValuation = VALUATION_UNIVERSES.has(universe);
+  const showFuturistic = universe === "futuristic";
 
   return (
     <div className="product-panel">
@@ -212,6 +240,29 @@ export default function EquityFilterPanel({
               onChange={(v) => onChange("sector", v)}
             />
           </div>
+        )}
+        {showFuturistic && (
+          <>
+            <div className="product-section-nested">
+              <ProductLabel>Theme</ProductLabel>
+              <PillGroup
+                value={futuristicTheme}
+                options={FUTURISTIC_THEME_OPTIONS}
+                onChange={(v) => onChange("futuristicTheme", v)}
+              />
+            </div>
+            <div className="product-section-nested">
+              <ProductLabel>Index scope</ProductLabel>
+              <PillGroup
+                value={futuristicScope}
+                options={FUTURISTIC_SCOPE_OPTIONS}
+                onChange={(v) => onChange("futuristicScope", v)}
+              />
+              <p className="mt-2 text-[0.65rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                Soft quality gate: tech≥60 · fund≥55 · no Avoid/downtrend · growth tilt · max 5/theme · top 20
+              </p>
+            </div>
+          </>
         )}
         {showValuation && (
           <div className="product-section-nested">

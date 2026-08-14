@@ -1,6 +1,6 @@
 import { fetchLiveMarketBundle } from "@/lib/data/agents/orchestrator";
 import { resampleBars } from "@/lib/data/sync";
-import { INDEX_SYMBOL, normalizeSymbol, SECTORS, UNIVERSES } from "@/lib/data/universes";
+import { INDEX_SYMBOL, normalizeSymbol, SECTORS, UNIVERSES, resolveFuturisticSymbols, resolveFuturisticTheme, futuristicThemeLabel } from "@/lib/data/universes";
 import { computeSignalExpectancy } from "./expectancy";
 import { combineDecision, scoreFundamentals } from "./fundamental";
 import { buildEquityAdvantages } from "./intel";
@@ -15,6 +15,9 @@ import {
 } from "./valuation-brackets";
 
 const SCAN_CONCURRENCY = 6;
+const FUTURISTIC_MIN_TECH = 60;
+const FUTURISTIC_MIN_FUND = 55;
+const FUTURISTIC_MAX_PER_THEME = 5;
 
 async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
@@ -227,6 +230,10 @@ export async function scanUniverse(opts: {
   risk_level?: string;
   setup?: string;
   valuation?: ValuationFilter;
+  /** Futuristic theme key or "all" */
+  theme?: string;
+  /** Liquid index scope for futuristic: nifty50|nifty100|nifty500|midcap|smallcap */
+  scope?: string;
   limit?: number;
 }) {
   const {
@@ -237,19 +244,32 @@ export async function scanUniverse(opts: {
     risk_level,
     setup,
     valuation = "",
+    theme = "all",
+    scope = "nifty500",
     limit = 30,
   } = opts;
 
-  let symbols = UNIVERSES[universe] || UNIVERSES.nifty50;
-  if (universe === "sector" && sector) symbols = SECTORS[sector] || SECTORS.IT;
+  const isFuturistic = universe === "futuristic";
+  const effectiveLimit = isFuturistic ? Math.min(limit, 20) : limit;
+
+  let symbols: string[];
+  if (isFuturistic) {
+    symbols = resolveFuturisticSymbols(theme, scope);
+  } else if (universe === "sector" && sector) {
+    symbols = SECTORS[sector] || SECTORS.IT;
+  } else {
+    symbols = UNIVERSES[universe] || UNIVERSES.nifty50;
+  }
 
   // Scan full small universes; cap large ones but cover more than first 50 names
   const scanCap =
-    symbols.length <= 20
+    symbols.length <= 30
       ? symbols.length
-      : universe === "nifty500"
-        ? Math.min(symbols.length, 120)
-        : Math.min(symbols.length, Math.max(limit * 4, 80));
+      : isFuturistic
+        ? Math.min(symbols.length, 100)
+        : universe === "nifty500"
+          ? Math.min(symbols.length, 120)
+          : Math.min(symbols.length, Math.max(effectiveLimit * 4, 80));
   const toScan = symbols.slice(0, scanCap);
 
   const niftyLive = await fetchLiveMarketBundle(INDEX_SYMBOL, { days: 365 });
@@ -264,7 +284,18 @@ export async function scanUniverse(opts: {
     }
   });
 
-  const results = [];
+  type ScanRow = Record<string, unknown> & {
+    symbol: string;
+    final_score: number;
+    technical_score: number;
+    fundamental_score: number;
+    signal: string;
+    theme?: string;
+    theme_label?: string;
+    futuristic_rank_score?: number;
+  };
+
+  const results: ScanRow[] = [];
   for (const a of analyzed) {
     if (!a || "error" in a) continue;
     if (recommendation && a.signal.toLowerCase() !== recommendation.toLowerCase()) continue;
@@ -290,8 +321,9 @@ export async function scanUniverse(opts: {
       industry: fund.industry,
     });
 
-    if (!passesMarketCapBand(universe, market_cap)) continue;
+    if (!isFuturistic && !passesMarketCapBand(universe, market_cap)) continue;
     if (
+      !isFuturistic &&
       !passesValuationFilter({
         universe,
         valuation,
@@ -301,6 +333,38 @@ export async function scanUniverse(opts: {
     ) {
       continue;
     }
+
+    // Futuristic quality sleeve — softer than Buy gate, still institutional hygiene
+    if (isFuturistic) {
+      if (a.technical_score < FUTURISTIC_MIN_TECH || a.fundamental_score < FUTURISTIC_MIN_FUND) continue;
+      if (a.signal === "Avoid") continue;
+      if (a.trend === "downtrend") continue;
+      const rs = a.score_breakdown?.relative_strength ?? 50;
+      // RS score is 0–100 style from tech engine; also check mvrb if present
+      const rsRatio = a.signal_diagnostics?.mvrb?.rs_vs_nifty;
+      if (rsRatio != null && rsRatio < 0.85) continue;
+      if (rsRatio == null && rs < 40) continue;
+
+      const rg = Number(fund.revenue_growth ?? NaN);
+      const eg = Number(fund.earnings_growth ?? NaN);
+      const hasGrowth = (Number.isFinite(rg) && rg >= 0.08) || (Number.isFinite(eg) && eg >= 0.08);
+      // Require growth evidence OR solid fund (≥60) — thematic PMs avoid value traps in growth sleeves
+      if (!hasGrowth && a.fundamental_score < 60) continue;
+
+      // Allow premium valuation on growth themes; block expensive without strong growth
+      if (valuation_bracket === "expensive") {
+        const strongGrowth = (Number.isFinite(rg) && rg >= 0.15) || (Number.isFinite(eg) && eg >= 0.15);
+        if (!strongGrowth) continue;
+      }
+    }
+
+    const themeKey = resolveFuturisticTheme(a.symbol);
+    const growthBonus =
+      Math.max(0, Number(fund.revenue_growth ?? 0) * 20) +
+      Math.max(0, Number(fund.earnings_growth ?? 0) * 15);
+    const futuristic_rank_score = Math.round(
+      a.final_score * 0.7 + a.technical_score * 0.15 + a.fundamental_score * 0.1 + Math.min(15, growthBonus),
+    );
 
     const {
       chart_data,
@@ -335,8 +399,29 @@ export async function scanUniverse(opts: {
       price_chg_15d: diag?.obv?.price_change_15d_pct ?? 0,
       accuracy_score: a.data_quality?.accuracy_score,
       index_regime_label: regime.label,
+      theme: themeKey,
+      theme_label: themeKey ? futuristicThemeLabel(themeKey) : undefined,
+      futuristic_rank_score,
     });
   }
 
-  return results.sort((a, b) => b.final_score - a.final_score).slice(0, limit);
+  if (isFuturistic) {
+    results.sort((a, b) => (b.futuristic_rank_score ?? b.final_score) - (a.futuristic_rank_score ?? a.final_score));
+    // Theme diversification when scanning All themes
+    if (!theme || theme === "all") {
+      const diversified: ScanRow[] = [];
+      const themeCount: Record<string, number> = {};
+      for (const row of results) {
+        const t = row.theme || "other";
+        if ((themeCount[t] || 0) >= FUTURISTIC_MAX_PER_THEME) continue;
+        diversified.push(row);
+        themeCount[t] = (themeCount[t] || 0) + 1;
+        if (diversified.length >= effectiveLimit) break;
+      }
+      return diversified;
+    }
+    return results.slice(0, effectiveLimit);
+  }
+
+  return results.sort((a, b) => b.final_score - a.final_score).slice(0, effectiveLimit);
 }

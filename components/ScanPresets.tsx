@@ -52,6 +52,18 @@ export const SCAN_PRESETS: ScanPreset[] = [
     description: "Nifty 100 high scores",
     params: { universe: "nifty100", recommendation: "Buy" },
   },
+  {
+    id: "futuristic-all",
+    label: "Futuristic themes",
+    description: "AI, EV, renewables, defence — quality sleeve",
+    params: { universe: "futuristic", theme: "all", scope: "nifty500" },
+  },
+  {
+    id: "futuristic-ai",
+    label: "AI / Digital",
+    description: "IT + digital pure plays, soft quality gate",
+    params: { universe: "futuristic", theme: "ai_digital", scope: "nifty500" },
+  },
 ];
 
 export default function ScanPresets({

@@ -41,6 +41,8 @@ type EquityCache = {
   riskFilter: string;
   setupFilter: string;
   valuationFilter: string;
+  futuristicTheme: string;
+  futuristicScope: string;
   analysis: EquityAnalysis | null;
   scanResults: ScanResult[];
   scanned: boolean;
@@ -61,6 +63,8 @@ function EquityPageContent() {
   const [riskFilter, setRiskFilter] = useState(cached?.riskFilter ?? "");
   const [setupFilter, setSetupFilter] = useState(cached?.setupFilter ?? "");
   const [valuationFilter, setValuationFilter] = useState(cached?.valuationFilter ?? "");
+  const [futuristicTheme, setFuturisticTheme] = useState(cached?.futuristicTheme ?? "all");
+  const [futuristicScope, setFuturisticScope] = useState(cached?.futuristicScope ?? "nifty500");
   const [analysis, setAnalysis] = useState<EquityAnalysis | null>(cached?.analysis ?? null);
   const [scanResults, setScanResults] = useState<ScanResult[]>(cached?.scanResults ?? []);
   const [scanned, setScanned] = useState(cached?.scanned ?? false);
@@ -79,6 +83,8 @@ function EquityPageContent() {
         riskFilter,
         setupFilter,
         valuationFilter,
+        futuristicTheme,
+        futuristicScope,
         analysis,
         scanResults,
         scanned,
@@ -89,7 +95,8 @@ function EquityPageContent() {
     },
     [
       cache, symbol, universe, sector, timeframe, recFilter, riskFilter,
-      setupFilter, valuationFilter, analysis, scanResults, scanned, regimeOverview,
+      setupFilter, valuationFilter, futuristicTheme, futuristicScope,
+      analysis, scanResults, scanned, regimeOverview,
     ],
   );
 
@@ -104,6 +111,8 @@ function EquityPageContent() {
     setRiskFilter(saved.riskFilter);
     setSetupFilter(saved.setupFilter);
     setValuationFilter(saved.valuationFilter);
+    setFuturisticTheme(saved.futuristicTheme ?? "all");
+    setFuturisticScope(saved.futuristicScope ?? "nifty500");
     setAnalysis(saved.analysis);
     setScanResults(saved.scanResults);
     setScanned(saved.scanned);
@@ -137,6 +146,8 @@ function EquityPageContent() {
     const risk = overrides?.risk_level ?? riskFilter;
     const setup = overrides?.setup ?? setupFilter;
     const val = overrides?.valuation ?? valuationFilter;
+    const theme = overrides?.theme ?? futuristicTheme;
+    const scope = overrides?.scope ?? futuristicScope;
 
     setLoading(true);
     setError("");
@@ -145,10 +156,16 @@ function EquityPageContent() {
     if (overrides?.recommendation !== undefined) setRecFilter(overrides.recommendation);
     if (overrides?.setup !== undefined) setSetupFilter(overrides.setup);
     if (overrides?.valuation !== undefined) setValuationFilter(overrides.valuation);
+    if (overrides?.theme !== undefined) setFuturisticTheme(overrides.theme);
+    if (overrides?.scope !== undefined) setFuturisticScope(overrides.scope);
 
     try {
-      let url = `/api/equity/scan?universe=${u}&timeframe=${timeframe}&limit=40`;
+      const limit = u === "futuristic" ? 20 : 40;
+      let url = `/api/equity/scan?universe=${u}&timeframe=${timeframe}&limit=${limit}`;
       if (u === "sector") url += `&sector=${sec}`;
+      if (u === "futuristic") {
+        url += `&theme=${encodeURIComponent(theme)}&scope=${encodeURIComponent(scope)}`;
+      }
       if (rec) url += `&recommendation=${rec}`;
       if (risk) url += `&risk_level=${risk}`;
       if (setup) url += `&setup=${setup}`;
@@ -163,6 +180,8 @@ function EquityPageContent() {
         recFilter: overrides?.recommendation ?? recFilter,
         setupFilter: overrides?.setup ?? setupFilter,
         valuationFilter: overrides?.valuation ?? valuationFilter,
+        futuristicTheme: theme,
+        futuristicScope: scope,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
@@ -170,7 +189,7 @@ function EquityPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter, persist]);
+  }, [universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter, futuristicTheme, futuristicScope, persist]);
 
   const runPreset = (preset: ScanPreset) => {
     runScan(preset.params);
@@ -285,7 +304,10 @@ function EquityPageContent() {
       <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
         <div className="page-stack min-w-0">
           <EquityFilterPanel
-            filters={{ symbol, universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter }}
+            filters={{
+              symbol, universe, sector, timeframe, recFilter, riskFilter, setupFilter, valuationFilter,
+              futuristicTheme, futuristicScope,
+            }}
             onChange={(key, value) => {
               if (key === "symbol") setSymbol(value);
               else if (key === "universe") {
@@ -300,6 +322,8 @@ function EquityPageContent() {
               else if (key === "riskFilter") setRiskFilter(value);
               else if (key === "setupFilter") setSetupFilter(value);
               else if (key === "valuationFilter") setValuationFilter(value);
+              else if (key === "futuristicTheme") setFuturisticTheme(value);
+              else if (key === "futuristicScope") setFuturisticScope(value);
             }}
             onAnalyze={() => analyze()}
             onScan={() => runScan()}
@@ -327,6 +351,8 @@ function EquityPageContent() {
                   "Bank Nifty scan works — results are often Watch in neutral regimes. Switch Recommendation to All if you filtered to Buy."}
                 {!recFilter && universe === "sector" &&
                   "Sector scan uses 7–8 names per sector. If empty, clear Setup/Risk filters or pick a different sector."}
+                {!recFilter && universe === "futuristic" &&
+                  "Futuristic sleeve needs tech≥60, fund≥55, no Avoid/downtrend, soft RS, and growth evidence (or fund≥60). Try Theme → All, Scope → All liquid, clear Risk/Setup."}
                 {!recFilter && universe === "nifty500" &&
                   "Nifty 500 scans up to 120 names (takes 2–4 min). If empty, clear Setup/Risk filters."}
                 {!recFilter && !["midcap", "smallcap", "banknifty", "sector", "nifty500"].includes(universe) &&
@@ -493,7 +519,10 @@ function EquityPageContent() {
           {scanResults.length > 0 && !loading && (
             <div className="card">
               <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
-                Universe Scan — {scanResults.length} stocks
+                {universe === "futuristic" ? "Futuristic themes" : "Universe Scan"} — {scanResults.length} stocks
+                {universe === "futuristic"
+                  ? ` · ${futuristicTheme === "all" ? "All themes" : futuristicTheme} · ${futuristicScope}`
+                  : ""}
                 {recFilter ? ` · filter: ${recFilter}` : ""}
                 {(universe === "midcap" || universe === "smallcap") && !valuationFilter
                   ? " · valuation: Cheap+Fair"
@@ -506,6 +535,7 @@ function EquityPageContent() {
                   <thead>
                     <tr>
                       <th>Symbol</th>
+                      {universe === "futuristic" && <th>Theme</th>}
                       <th>Signal</th>
                       <th>Score</th>
                       <th>Tech</th>
@@ -524,6 +554,11 @@ function EquityPageContent() {
                     {scanResults.map((r) => (
                       <tr key={r.symbol} onClick={() => analyze(r.symbol)}>
                         <td className="font-medium">{r.symbol.replace(".NS", "")}</td>
+                        {universe === "futuristic" && (
+                          <td className="text-xs" style={{ color: "var(--accent)" }}>
+                            {r.theme_label || "—"}
+                          </td>
+                        )}
                         <td><SignalBadge signal={r.signal} /></td>
                         <td className="font-mono tabular-nums" style={{ color: "var(--accent)" }}>{r.final_score}</td>
                         <td className="font-mono tabular-nums">{r.technical_score}</td>
@@ -543,7 +578,7 @@ function EquityPageContent() {
                         <td className="font-mono tabular-nums">₹{r.current_price}</td>
                         <td className="font-mono tabular-nums">1:{r.risk_reward}</td>
                         <td>{r.risk_level}</td>
-                        <td className="max-w-[200px] truncate text-xs" style={{ color: "var(--fg-tertiary)" }}>{r.reason}</td>
+                        <td className="table-cell-note">{r.reason || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
