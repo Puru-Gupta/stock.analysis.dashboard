@@ -1,6 +1,6 @@
 /** Black-Scholes pricing and Greeks for Indian equity/index options. */
 
-const RISK_FREE_RATE = 0.065; // ~6.5% India T-bill proxy
+export const RISK_FREE_RATE = 0.065; // ~6.5% India T-bill proxy
 
 function normPdf(x: number) {
   return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
@@ -67,6 +67,35 @@ export function blackScholesGreeks(
     theta: Math.round(theta * 100) / 100,
     vega: Math.round(vega * 100) / 100,
   };
+}
+
+/** Implied vol from market premium when NSE omits impliedVolatility. */
+export function impliedVolFromPrice(
+  spot: number,
+  strike: number,
+  daysToExpiry: number,
+  type: "call" | "put",
+  marketPrice: number,
+  rate = RISK_FREE_RATE,
+): number | null {
+  if (spot <= 0 || strike <= 0 || daysToExpiry <= 0 || marketPrice <= 0) return null;
+  const intrinsic =
+    type === "call" ? Math.max(0, spot - strike) : Math.max(0, strike - spot);
+  if (marketPrice < intrinsic * 0.98 && marketPrice < intrinsic + 0.05) return null;
+
+  let vol = 0.25;
+  for (let i = 0; i < 40; i++) {
+    const g = blackScholesGreeks(spot, strike, vol, daysToExpiry, type, rate);
+    const diff = g.price - marketPrice;
+    if (Math.abs(diff) < 0.01) return Math.min(3, Math.max(0.03, vol));
+    const vegaPerUnit = g.vega * 100;
+    if (vegaPerUnit < 1e-8) break;
+    vol -= diff / vegaPerUnit;
+    vol = Math.min(3, Math.max(0.03, vol));
+  }
+  const check = blackScholesGreeks(spot, strike, vol, daysToExpiry, type, rate).price;
+  if (Math.abs(check - marketPrice) > Math.max(0.5, marketPrice * 0.15)) return null;
+  return Math.min(3, Math.max(0.03, vol));
 }
 
 export function daysToExpiryFromNseDate(expiryStr: string): number {

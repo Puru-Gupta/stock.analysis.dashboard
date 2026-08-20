@@ -75,11 +75,11 @@ function FocusBadge({
   );
 }
 
-function StrikePicksTable({ picks }: { picks: OptionRec[] }) {
+function StrikePicksTable({ picks, emptyHint }: { picks: OptionRec[]; emptyHint?: string }) {
   if (picks.length === 0) {
     return (
       <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
-        No qualifying strikes for this expiry and strategy.
+        {emptyHint ?? "No qualifying strikes for this expiry and strategy."}
       </p>
     );
   }
@@ -128,7 +128,13 @@ function StrikePicksTable({ picks }: { picks: OptionRec[] }) {
                 <td className="font-mono tabular-nums">
                   {"breakeven" in r && r.breakeven ? `₹${r.breakeven}` : r.entry_premium ? `₹${r.entry_premium[0]}–${r.entry_premium[1]}` : "—"}
                 </td>
-                <td className="font-mono tabular-nums">{r.stop_loss ? `₹${r.stop_loss}` : "—"}</td>
+                <td className="font-mono tabular-nums">
+                  {isSell && (r as { stop_label?: string }).stop_label
+                    ? (r as { stop_label?: string }).stop_label
+                    : r.stop_loss
+                      ? `₹${r.stop_loss}`
+                      : "—"}
+                </td>
                 <td className="table-cell-note">{r.reason || "—"}</td>
               </tr>
             );
@@ -242,17 +248,19 @@ export default function OptionsPage() {
     loadStatsPicks();
   }, [cacheRestored, subTab, optionType, loadStatsPicks]);
 
-  const analyze = useCallback(async (symOverride?: string) => {
+  const analyze = useCallback(async (symOverride?: string, modeOverride?: string) => {
     const sym = symOverride ?? symbol;
+    const mode = modeOverride ?? strategyMode;
+    if (modeOverride) setStrategyMode(modeOverride);
     setSymbol(sym);
     setLoading(true);
     setError("");
     try {
       const data = await fetchAPI<OptionsAnalysis>(
-        `/api/options/analyze?symbol=${encodeURIComponent(sym)}&option_type=${optionType}&strategy_mode=${strategyMode}&capital=${capital}&risk_level=${riskLevel}`
+        `/api/options/analyze?symbol=${encodeURIComponent(sym)}&option_type=${optionType}&strategy_mode=${mode}&capital=${capital}&risk_level=${riskLevel}`
       );
       setAnalysis(data);
-      persist({ analysis: data, symbol: sym, optionType, strategyMode, capital, riskLevel, analysisLoaded: true });
+      persist({ analysis: data, symbol: sym, optionType, strategyMode: mode, capital, riskLevel, analysisLoaded: true });
       if (data.error) setError(data.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
@@ -489,7 +497,7 @@ export default function OptionsPage() {
                   <tr
                     key={p.symbol}
                     className="cursor-pointer"
-                    onClick={() => analyze(p.symbol)}
+                    onClick={() => analyze(p.symbol, "selling")}
                     style={{
                       opacity: p.focus_status === "avoid" ? 0.72 : 1,
                     }}
@@ -592,7 +600,16 @@ export default function OptionsPage() {
                 ? `Engine Strike Picks — ${analysis.expiry} (${analysis.days_to_expiry} DTE)`
                 : "Engine Strike Picks"}
             </h3>
-            <StrikePicksTable picks={analysis.recommendations} />
+            <StrikePicksTable
+              picks={analysis.recommendations}
+              emptyHint={
+                analysis.next_expiry_chain && (analysis.strategy_mode === "selling" || analysis.strategy_mode === "neutral")
+                  ? "Nearest expiry ≤10 DTE — sell picks suppressed here. Use the next-expiry table below."
+                  : analysis.stats?.focus?.status === "avoid"
+                    ? "Strategy Fit is Avoid — no strike sells emitted."
+                    : undefined
+              }
+            />
           </div>
 
           {analysis.next_expiry_chain && (

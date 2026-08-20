@@ -221,10 +221,14 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
           accent={colorVar(stats.regime_color)}
         />
         <TopStat label="Confidence" value={`${confidence.score}`} sub={confidence.label} />
-        <TopStat label="IV Rank" value={`${volatility.iv_rank}%`} sub={`${volatility.iv_percentile}th pct`} />
+        <TopStat
+          label="Vol Rank"
+          value={`${volatility.iv_rank}%`}
+          sub="vs HV history (not classic IV Rank)"
+        />
         <TopStat
           label="HV vs IV"
-          value={`${volatility.iv_hv_ratio}x`}
+          value={volatility.iv_above_hv || volatility.iv_hv_ratio !== 1 ? `${volatility.iv_hv_ratio}x` : "—"}
           sub={`HV ${volatility.hv_20}% · IV ${volatility.implied_vol}%`}
           accent={volatility.iv_above_hv ? "var(--green)" : "var(--amber)"}
         />
@@ -411,6 +415,17 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
           <div className="flex-1">
             <p className="text-xs uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
               Recommended Action
+              {analysis.strategy_mode ? (
+                <span className="normal-case tracking-normal ml-2" style={{ color: "var(--fg-tertiary)" }}>
+                  ({analysis.strategy_mode === "selling"
+                    ? "Selling"
+                    : analysis.strategy_mode === "buying"
+                      ? "Buying"
+                      : analysis.strategy_mode === "neutral"
+                        ? "Neutral"
+                        : "Directional"})
+                </span>
+              ) : null}
             </p>
             <p className="text-xl font-medium mt-1" style={{ color: "var(--accent)" }}>
               {recommendation.action}
@@ -458,7 +473,7 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
                   <th>Strike</th>
                   <th>Type</th>
                   <th>Premium</th>
-                  <th>Dist σ</th>
+                  <th>Dist σ (fwd)</th>
                   <th>P(OTM)</th>
                   <th>P(ITM)</th>
                   <th>P(Touch)</th>

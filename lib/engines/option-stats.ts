@@ -263,9 +263,9 @@ function buildAlerts(ctx: {
   } else if (Math.abs(ctx.z1m) >= 2) {
     alerts.push({ id: "2sigma", type: "warning", title: "Stock outside 2σ", detail: `Price is ${ctx.z1m.toFixed(1)}σ from the 1-month mean — elevated move.` });
   }
-  if (ctx.ivRank >= 70) alerts.push({ id: "iv-rank", type: "opportunity", title: "High IV Rank", detail: `IV rank ${ctx.ivRank}% — premiums are rich vs the last year.` });
+  if (ctx.ivRank >= 70 && ctx.ivHv > 1) alerts.push({ id: "iv-rank", type: "opportunity", title: "Elevated Vol Rank", detail: `Vol rank ${ctx.ivRank}% vs HV history — confirm live premium on chain.` });
   if (ctx.ivHv >= 1.15) alerts.push({ id: "premium-rich", type: "opportunity", title: "Premium Rich", detail: "IV is above historical vol — favorable for option sellers." });
-  if (ctx.ivHv <= 0.85) alerts.push({ id: "premium-cheap", type: "info", title: "Premium Cheap", detail: "IV below HV — selling may not be well compensated." });
+  if (ctx.ivHv <= 0.85 && ctx.ivHv > 0) alerts.push({ id: "premium-cheap", type: "info", title: "Premium Cheap", detail: "IV below HV — selling may not be well compensated." });
   if (ctx.hvChange7 > 3) alerts.push({ id: "vol-expansion", type: "warning", title: "Volatility Expansion", detail: "HV jumped this week — widen strikes or reduce size." });
   if (ctx.hvChange7 < -2) alerts.push({ id: "iv-crush", type: "info", title: "Volatility Contraction", detail: "Realized vol falling — watch for IV crush after events." });
   if (ctx.meanRev.probability === "High") {
@@ -287,20 +287,29 @@ function buildAlerts(ctx: {
 
 function buildRecommendation(input: {
   optionType: "call" | "put";
+  strategyMode?: string;
   strikes: StrikeProbability[];
   z1m: number;
   ivRank: number;
   ivHv: number;
   regime: VolRegime;
   confidence: number;
+  ivIsProxy?: boolean;
+  focusStatus?: "clean" | "caution" | "avoid";
 }): SellerRecommendation {
   const type = input.optionType === "put" ? "PE" : "CE";
-  const action = input.optionType === "put" ? "SELL PE" : "SELL CE";
+  const mode = (input.strategyMode || "selling").toLowerCase();
+  const isSelling = mode.includes("sell") || mode === "neutral";
+  const isBuying = !isSelling;
+  const sideVerb = isBuying ? "BUY" : "SELL";
+  const actionDefault = `${sideVerb} ${type}`;
+
   const candidates = input.strikes
     .filter((s) => s.type === type)
     .sort((a, b) => {
       const scoreA = a.prob_otm * 0.5 + a.dist_sigma * 15 + (a.rating === "Excellent" ? 20 : a.rating === "Good" ? 10 : 0);
       const scoreB = b.prob_otm * 0.5 + b.dist_sigma * 15 + (b.rating === "Excellent" ? 20 : b.rating === "Good" ? 10 : 0);
+      if (isBuying) return b.prob_itm - a.prob_itm;
       return scoreB - scoreA;
     });
 
@@ -318,32 +327,59 @@ function buildRecommendation(input: {
     };
   }
 
+  if (isSelling && input.focusStatus === "avoid") {
+    return {
+      action: "WAIT",
+      suggested_strike: best.strike,
+      option_type: type,
+      prob_otm: best.prob_otm,
+      prob_touch: best.prob_touch,
+      risk: "High",
+      confidence: Math.min(40, input.confidence),
+      reasons: ["Focus avoid — earnings/news risk; do not sell premium here."],
+    };
+  }
+
   const reasons: string[] = [];
   if (Math.abs(input.z1m) >= 1.5) reasons.push(`Price near ${input.z1m > 0 ? "+" : ""}${input.z1m.toFixed(1)}σ`);
-  if (input.ivHv >= 1.05) reasons.push("IV higher than HV");
-  if (input.ivRank >= 55) reasons.push(`High IV Rank (${input.ivRank}%)`);
+  if (input.ivIsProxy) {
+    reasons.push("No live IV — HV used as proxy; treat vol edge as unconfirmed");
+  } else if (input.ivHv >= 1.05) {
+    reasons.push(isSelling ? "IV higher than HV" : "IV elevated vs HV — buying is more expensive");
+  }
+  if (!input.ivIsProxy && input.ivRank >= 55) reasons.push(`Elevated vol rank vs HV history (${input.ivRank}%)`);
   if (input.regime === "Quiet" || input.regime === "Very Quiet" || input.regime === "Normal") {
     reasons.push(`${input.regime} volatility regime`);
   }
-  reasons.push(`Historical probability favors expiry OTM (${best.prob_otm}%)`);
+  if (isSelling) reasons.push(`Forward P(OTM) ${best.prob_otm}% · ${best.dist_sigma}σ from spot`);
+  else reasons.push(`Forward P(ITM) ${best.prob_itm}% · ${best.dist_sigma}σ from spot`);
 
   let confidence = 50;
-  confidence += clamp01((best.prob_otm - 70) / 25) * 20;
-  confidence += clamp01(input.ivRank / 100) * 15;
-  confidence += input.ivHv >= 1.1 ? 10 : input.ivHv >= 1 ? 5 : 0;
+  if (isSelling) {
+    confidence += clamp01((best.prob_otm - 70) / 25) * 20;
+    confidence += input.ivIsProxy ? 0 : clamp01(input.ivRank / 100) * 15;
+    confidence += input.ivIsProxy ? 0 : input.ivHv >= 1.1 ? 10 : input.ivHv >= 1 ? 5 : 0;
+  } else {
+    confidence += clamp01((best.prob_itm - 35) / 30) * 20;
+    confidence += input.ivIsProxy ? 5 : input.ivHv <= 1 ? 10 : 0;
+  }
   confidence += clamp01(input.confidence / 100) * 15;
-  confidence -= best.prob_touch > 40 ? 10 : 0;
+  confidence -= best.prob_touch > 40 && isSelling ? 10 : 0;
   confidence = Math.round(Math.min(95, Math.max(20, confidence)));
 
   const risk: SellerRecommendation["risk"] =
-    best.prob_otm >= 88 && best.dist_sigma >= 1.5 && best.prob_touch <= 35
-      ? "Low"
-      : best.prob_otm >= 75
+    isSelling
+      ? best.prob_otm >= 88 && best.dist_sigma >= 1.5 && best.prob_touch <= 35
+        ? "Low"
+        : best.prob_otm >= 75
+          ? "Medium"
+          : "High"
+      : best.prob_itm >= 55
         ? "Medium"
         : "High";
 
   return {
-    action,
+    action: actionDefault,
     suggested_strike: best.strike,
     option_type: type,
     prob_otm: best.prob_otm,
@@ -361,10 +397,13 @@ export function computeOptionStats(input: {
   atmIv: number;
   trend: string;
   optionType: "call" | "put";
-  legs: { strike: number; ltp: number; iv?: number; type: string }[];
+  legs: { strike: number; ltp: number; iv?: number; type: string; expiry?: string }[];
   earnings?: UpcomingEarnings | null;
+  strategyMode?: string;
+  ivIsProxy?: boolean;
 }): OptionStatsBundle {
   const { bars, spot, daysToExpiry, atmIv, trend, optionType } = input;
+  const ivIsProxy = Boolean(input.ivIsProxy);
   const hv20 = historicalVol(bars, 20);
   const hv60 = bars.length >= 65 ? historicalVol(bars, 60) : hv20;
   const hv120 = bars.length >= 125 ? historicalVol(bars, 120) : hv60;
@@ -421,22 +460,26 @@ export function computeOptionStats(input: {
   const ivTrendLabel =
     ivTrend === "rising" ? "Vol expanding" : ivTrend === "falling" ? "Vol contracting" : "Vol stable";
 
-  const sellerFavor =
-    (iv >= hv20 ? 35 : 10) + clamp01(ivRank / 100) * 35 + clamp01((iv / hv20 - 0.9) / 0.4) * 30;
+  const sellerFavor = ivIsProxy
+    ? 25 + clamp01(hvPct / 100) * 25 + (volatility_regime === "Quiet" || volatility_regime === "Very Quiet" ? 15 : 5)
+    : (iv >= hv20 ? 35 : 10) + clamp01(ivRank / 100) * 35 + clamp01((iv / hv20 - 0.9) / 0.4) * 30;
   const sellerStars = starsFromScore(sellerFavor);
-  const ivHvRatio = hv20 > 0 ? iv / hv20 : 1;
+  const ivHvRatio = ivIsProxy ? 1 : hv20 > 0 ? iv / hv20 : 1;
 
   const sellerNotes: string[] = [];
-  if (iv >= hv20 && ivHvRatio < 1.1) sellerNotes.push("IV is only slightly above HV — modest premium edge");
-  if (ivRank < 40) sellerNotes.push(`IV rank ${ivRank}% is low vs the past year — premiums not historically rich`);
+  if (ivIsProxy) sellerNotes.push("No live option IV — HV used as proxy; premium edge not confirmed");
+  if (!ivIsProxy && iv >= hv20 && ivHvRatio < 1.1) sellerNotes.push("IV is only slightly above HV — modest premium edge");
+  if (!ivIsProxy && ivRank < 40) sellerNotes.push(`Vol rank ${ivRank}% vs HV history is low — premiums not historically rich`);
   if (ivTrend === "falling") sellerNotes.push("Vol is contracting — option prices may compress further");
   if (Math.abs(primary?.z_score ?? 0) >= 1.5) {
     const z = primary!.z_score;
-    sellerNotes.push(`Price is ${z > 0 ? "+" : ""}${z}σ from mean — elevated directional risk for CE sellers`);
+    const side = optionType === "put" ? "PE" : "CE";
+    sellerNotes.push(`Price is ${z > 0 ? "+" : ""}${z}σ from mean — elevated directional risk for ${side} sellers`);
   }
 
-  const sellerLabel =
-    sellerFavor >= 75
+  const sellerLabel = ivIsProxy
+    ? "HV proxy only — confirm with live chain"
+    : sellerFavor >= 75
       ? "GOOD FOR OPTION SELLERS"
       : sellerFavor >= 55
         ? "Favorable for sellers"
@@ -460,7 +503,7 @@ export function computeOptionStats(input: {
     seller_label: sellerLabel,
     seller_stars: sellerStars,
     seller_notes: sellerNotes,
-    iv_above_hv: iv >= hv20,
+    iv_above_hv: !ivIsProxy && iv >= hv20,
   };
 
   const z1m = primary?.z_score ?? 0;
@@ -489,6 +532,9 @@ export function computeOptionStats(input: {
     })
     .slice(0, 50);
 
+  const tYear = daysToExpiry / 365;
+  const forwardUnit = Math.max(spot * iv * Math.sqrt(tYear), spot * 0.005);
+
   const strike_probabilities: StrikeProbability[] = chainLegs.map((leg) => {
     const type = leg.type === "PE" ? "PE" : "CE";
     const opt = type === "PE" ? "put" : "call";
@@ -496,15 +542,15 @@ export function computeOptionStats(input: {
     const pAbove = probAbove(spot, leg.strike, vol, daysToExpiry);
     const probItm = opt === "call" ? pAbove : 100 - pAbove;
     const probOtm = r1(100 - probItm);
-    const distFromMean = primary ? r2(leg.strike - primary.mean) : r2(leg.strike - spot);
-    const distSigma = primary && primary.std_dev > 0 ? r1(Math.abs(leg.strike - primary.mean) / primary.std_dev) : 0;
+    const distFromSpot = r2(leg.strike - spot);
+    const distSigma = r1(Math.abs(leg.strike - spot) / forwardUnit);
     const touch = probTouch(spot, leg.strike, vol, daysToExpiry, opt);
     const { rating, color } = strikeRating(probOtm, distSigma);
     return {
       strike: leg.strike,
       type,
       premium: leg.ltp,
-      dist_from_mean: distFromMean,
+      dist_from_mean: distFromSpot,
       dist_sigma: distSigma,
       prob_otm: probOtm,
       prob_itm: probItm,
@@ -532,14 +578,25 @@ export function computeOptionStats(input: {
     probability_rating: bestStrike?.rating ?? "Caution",
   };
 
+  const focus = assessStockFocus({
+    bars,
+    hv: hv20,
+    zScore1m: z1m,
+    volRegime: volatility_regime,
+    earnings: input.earnings,
+  });
+
   const recommendation = buildRecommendation({
     optionType,
+    strategyMode: input.strategyMode,
     strikes: filteredStrikes.length ? filteredStrikes : strike_probabilities,
     z1m,
     ivRank,
     ivHv: volatility.iv_hv_ratio,
     regime: volatility_regime,
     confidence: confidence.score,
+    ivIsProxy,
+    focusStatus: focus.status,
   });
 
   const alerts = buildAlerts({
@@ -550,14 +607,6 @@ export function computeOptionStats(input: {
     meanRev: mean_reversion,
     bestStrike,
     hvChange7: hvChg7,
-  });
-
-  const focus = assessStockFocus({
-    bars,
-    hv: hv20,
-    zScore1m: z1m,
-    volRegime: volatility_regime,
-    earnings: input.earnings,
   });
 
   return {

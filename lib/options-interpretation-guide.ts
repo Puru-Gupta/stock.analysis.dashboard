@@ -50,46 +50,47 @@ export const OPTIONS_INTERPRETATION_SECTIONS: InterpretationSection[] = [
   },
   {
     id: "confidence",
-    title: "4. Distribution Confidence",
-    what: "Range: 0–100. Measures how well historical prices match the normal-distribution model.",
+    title: "4. Distribution Confidence (Conf. on leaderboard)",
+    what: "Range: 0–100. How well recent returns fit the normal model used for P(OTM) and ranges — not a win-rate.",
     table: [
-      { label: "80–100", meaning: "Highly reliable" },
-      { label: "60–80", meaning: "Good" },
+      { label: "80–100", meaning: "Highly reliable model fit" },
+      { label: "60–80", meaning: "Good — probabilities usable" },
       { label: "40–60", meaning: "Use caution" },
-      { label: "Below 40", meaning: "Normal-distribution assumptions are weak" },
+      { label: "Below 40", meaning: "Treat probabilities as rough" },
     ],
     interpretation: {
       items: [
-        "Higher confidence — historical behavior closely matches the statistical model.",
-        "Lower confidence — treat probabilities as rough estimates, not precise forecasts.",
+        "Higher Conf. — historical behavior closely matches the statistical model.",
+        "Lower Conf. — fat tails or skew make normal-curve probabilities less trustworthy.",
       ],
     },
   },
   {
     id: "iv-rank",
-    title: "5. IV Rank",
-    what: "Shows where today's implied volatility sits relative to the past year.",
+    title: "5. Vol Rank (vs HV history)",
+    what: "Where today's vol sits vs a history of HV windows — a proxy on the scan board; classic IV Rank needs an IV time series.",
     table: [
-      { label: "0–20", meaning: "Low IV" },
-      { label: "20–50", meaning: "Normal" },
-      { label: "50–80", meaning: "High" },
-      { label: "Above 80", meaning: "Very High" },
+      { label: "0–20", meaning: "Vol low vs its HV history" },
+      { label: "20–50", meaning: "Mid-range" },
+      { label: "50–80", meaning: "Elevated vs HV history" },
+      { label: "Above 80", meaning: "Very elevated vs HV history" },
     ],
     interpretation: {
       items: [
-        "Higher IV generally means richer option premiums.",
-        "Lower IV usually means cheaper premiums.",
+        "On the stock detail view, prefer live IV/HV when the chain loads.",
+        "Quiet + sideways + near-mean is the primary short-premium structure edge.",
       ],
     },
   },
   {
     id: "hv-iv",
     title: "6. HV vs IV",
-    what: "Compares Historical Volatility vs Implied Volatility.",
+    what: "Compares Historical Volatility vs Implied Volatility from the live chain when available.",
     interpretation: {
       items: [
         "IV > HV — Options price in more movement than recently occurred. Generally more favorable for option sellers.",
         "IV < HV — Options may be relatively inexpensive. Can be more attractive for option buyers.",
+        "When live IV is missing, detail view shows — and does not invent a premium edge.",
       ],
     },
   },
@@ -137,35 +138,48 @@ export const OPTIONS_INTERPRETATION_SECTIONS: InterpretationSection[] = [
     how: "Use as an overview — do not decide from a single metric alone.",
   },
   {
+    id: "recommended-action",
+    title: "11. Recommended Action",
+    what: "Follows the Strategy Mode pill (Selling / Buying / Directional / Neutral).",
+    interpretation: {
+      items: [
+        "Selling — picks highest forward P(OTM) strike; WAIT if Focus is Avoid.",
+        "Buying — picks higher P(ITM); premiums cost more when IV > HV.",
+        "Dist σ (fwd) — distance from spot in forward expected-move units, not price-mean σ.",
+        "Stop on sell picks — premium ceiling (≥₹), not a spot price stop.",
+      ],
+    },
+  },
+  {
     id: "focus",
-    title: "11. Focus (News / Odd Activity)",
-    what: "Flags stocks with abnormal price, volume, or volatility — possible news or events.",
+    title: "12. Focus (News / Odd Activity)",
+    what: "Flags abnormal price, volume, or volatility — possible news or events. Not a full news feed.",
     table: [
       { label: "Clean", meaning: "No unusual signatures — preferred for option selling" },
       { label: "Caution", meaning: "Some odd activity — verify before selling" },
       { label: "Results soon", meaning: "Earnings/results within ~3 weeks — elevated event risk" },
+      { label: "Avoid", meaning: "Strong event/tape risk — fresh sells blocked in analysis" },
     ],
     bullets: [
-      "News? — gap, large 1-day move, vol spike, or volume surge together",
-      "Results soon — upcoming earnings within ~3 weeks (from Yahoo calendar)",
-      "Tags like Gap open, Vol spike, Results 31 Jul explain what triggered the flag",
+      "News? — gap, large 1-day move, vol spike, or volume surge (inferred from tape)",
+      "Results soon — Yahoo calendar (can be estimates)",
     ],
   },
 ];
 
 export const OPTIONS_SELLER_ENVIRONMENT = {
   favorable: [
-    "IV higher than Historical Volatility",
-    "Quiet or Normal volatility regime",
+    "Quiet or Normal volatility regime + sideways tape",
+    "Price near mean (|Z| small)",
+    "Clean focus",
     "High Distribution Confidence",
-    "Price within or only moderately outside expected ranges",
-    "Stable trend",
+    "Live IV ≥ HV on the chain (bonus)",
   ],
   higherRisk: [
     "Extreme volatility regime",
     "Low Distribution Confidence",
     "Price far beyond ±2σ",
     "Strong trending market",
-    "Major news or earnings events",
+    "Focus Avoid / Results soon",
   ],
 };

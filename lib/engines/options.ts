@@ -3,7 +3,12 @@ import { getPriceHistory } from "@/lib/data/sync";
 import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
-import { blackScholesGreeks, daysToExpiryFromNseDate } from "./greeks";
+import {
+  blackScholesGreeks,
+  daysToExpiryFromNseDate,
+  impliedVolFromPrice,
+  RISK_FREE_RATE,
+} from "./greeks";
 import { fetchUpcomingEarnings } from "@/lib/data/earnings-calendar";
 import {
   buildPremiumDecayTimeline,
@@ -93,17 +98,16 @@ function computeVolatilityMetrics(bars: { close: number }[], atmIv?: number) {
 }
 
 export function atmIvFromLegs(
-  legs: { strike: number; iv?: number; type: string }[],
+  legs: { strike: number; iv?: number; type: string; ltp?: number; expiry?: string }[],
   spot: number,
   hv: number,
 ) {
-  if (!legs.length) return hv;
-  const withIv = legs.filter((l) => l.iv && l.iv > 0);
-  if (!withIv.length) return hv;
-  const nearest = withIv.reduce((best, leg) =>
-    Math.abs(leg.strike - spot) < Math.abs(best.strike - spot) ? leg : best,
+  const resolved = resolveAtmIv(
+    legs.map((l) => ({ strike: l.strike, ltp: l.ltp ?? 0, iv: l.iv, type: l.type, expiry: l.expiry })),
+    spot,
+    hv,
   );
-  return normalizeIv(nearest.iv, hv);
+  return resolved.iv;
 }
 
 function attachGreeks(
@@ -133,11 +137,60 @@ function normCdf(x: number) {
   return x > 0 ? 1 - p : p;
 }
 
-export function probAbove(spot: number, strike: number, vol: number, days: number) {
+export function probAbove(
+  spot: number,
+  strike: number,
+  vol: number,
+  days: number,
+  rate = RISK_FREE_RATE,
+) {
   if (vol <= 0 || days <= 0) return 50;
   const t = days / 365;
-  const d2 = (Math.log(spot / strike) + (-0.5 * vol ** 2) * t) / (vol * Math.sqrt(t));
+  const d2 = (Math.log(spot / strike) + (rate - 0.5 * vol ** 2) * t) / (vol * Math.sqrt(t));
   return Math.round(normCdf(d2) * 1000) / 10;
+}
+
+type ChainLeg = {
+  strike: number;
+  ltp: number;
+  iv?: number;
+  type: string;
+  expiry?: string;
+};
+
+/** Fill missing leg IV from LTP when NSE omits impliedVolatility (analyze path only). */
+export function enrichLegsWithImpliedVol(legs: ChainLeg[], spot: number): ChainLeg[] {
+  if (!legs.length || spot <= 0) return legs;
+  return legs.map((leg) => {
+    if (leg.iv && leg.iv > 0) return leg;
+    if (!(leg.ltp > 0)) return leg;
+    const dte = leg.expiry ? daysToExpiryFromNseDate(leg.expiry) : 30;
+    const type = leg.type === "PE" || leg.type === "put" ? "put" : "call";
+    const iv = impliedVolFromPrice(spot, leg.strike, dte, type, leg.ltp);
+    return iv != null ? { ...leg, iv: iv * 100 } : leg;
+  });
+}
+
+export function resolveAtmIv(
+  legs: ChainLeg[] | null | undefined,
+  spot: number,
+  hv: number,
+): { iv: number; ivIsProxy: boolean; legs: ChainLeg[] } {
+  const original = legs ?? [];
+  const enriched = original.length ? enrichLegsWithImpliedVol(original, spot) : [];
+  const withIv = enriched.filter((l) => l.iv && l.iv > 0);
+  if (withIv.length) {
+    const nearest = withIv.reduce((best, leg) =>
+      Math.abs(leg.strike - spot) < Math.abs(best.strike - spot) ? leg : best,
+    );
+    const orig = original.find((l) => l.strike === nearest.strike && l.type === nearest.type);
+    return {
+      iv: normalizeIv(nearest.iv, hv),
+      ivIsProxy: !(orig?.iv && orig.iv > 0),
+      legs: enriched,
+    };
+  }
+  return { iv: hv, ivIsProxy: true, legs: enriched };
 }
 
 function moneyness(spot: number, strike: number, type: string) {
@@ -170,6 +223,8 @@ function buildStrikeRecommendations(input: {
   step: number;
   isSelling: boolean;
   expiryLegs: LiveOptionLeg[];
+  focusStatus?: "clean" | "caution" | "avoid";
+  allowSells?: boolean;
 }): Record<string, unknown>[] {
   const {
     spot,
@@ -184,7 +239,14 @@ function buildStrikeRecommendations(input: {
     step,
     isSelling,
     expiryLegs,
+    focusStatus = "clean",
+    allowSells = true,
   } = input;
+
+  const focusBlocksSells =
+    focusStatus === "avoid" ||
+    (focusStatus === "caution" && movementInsight.suitability === "avoid");
+  const sellBlocked = isSelling && (!allowSells || focusBlocksSells);
 
   const strikes: Record<string, unknown>[] = [];
 
@@ -223,11 +285,12 @@ function buildStrikeRecommendations(input: {
 
       const liquidityOk = rec.liquidity_ok as boolean;
       if (isSelling) {
-        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8 && liquidityOk) {
+        if (!sellBlocked && probOtm >= 70 && Math.abs(s - spot) > em * 0.8 && liquidityOk) {
           rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
           rec.premium_received = premium;
           rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
           rec.stop_loss = Math.round(premium * 2 * 100) / 100;
+          rec.stop_label = `≥₹${rec.stop_loss}`;
           rec.reason = `Live NSE LTP ₹${premium}, OI ${leg.oi ?? "—"}, P(OTM) ${probOtm}% (≥70), dist≥0.8×EM.`;
           rec.invalidation = optionType === "call"
             ? `Spot closes above ₹${rec.breakeven} on expiry`
@@ -279,11 +342,12 @@ function buildStrikeRecommendations(input: {
       attachGreeks(rec, spot, optionType, daysToExpiry, iv);
 
       if (isSelling) {
-        if (probOtm >= 70 && Math.abs(s - spot) > em * 0.8) {
+        if (!sellBlocked && probOtm >= 70 && Math.abs(s - spot) > em * 0.8) {
           rec.action = `Sell ${optionType.charAt(0).toUpperCase() + optionType.slice(1)}`;
           rec.premium_received = premium;
           rec.breakeven = optionType === "call" ? Math.round((s + premium) * 100) / 100 : Math.round((s - premium) * 100) / 100;
           rec.stop_loss = Math.round(premium * 2 * 100) / 100;
+          rec.stop_label = `≥₹${rec.stop_loss}`;
           rec.reason = `Synthetic HV estimate — prefer live chain (NIFTY/BANKNIFTY). P(OTM) ${probOtm}%.`;
           rec.invalidation = optionType === "call"
             ? `Spot closes above ₹${rec.breakeven} on expiry`
@@ -475,18 +539,23 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
   const movement = computePriceMovement(bars);
   const movementInsight = getMovementInsight(movement, optionType, strategyMode, trend);
   const hv = historicalVol(bars);
+  const earningsEarly = await fetchUpcomingEarnings(sym);
+  const focusPre = assessStockFocus({ bars, hv, earnings: earningsEarly });
 
   const liveLegs = (chain?.legs || []).filter((l) => l.type === (optionType === "put" ? "PE" : "CE") && l.ltp > 0);
   const resolved = resolveOptionExpiries(chain?.expiries);
   const nearestExpiry = resolved.nearestExpiry;
   const daysToExpiry = resolved.nearestDte;
-  const atmIv = atmIvFromLegs(chain?.legs || [], spot, hv);
+  const atmResolved = resolveAtmIv(chain?.legs || [], spot, hv);
+  const atmIv = atmResolved.iv;
+  const ivIsProxy = atmResolved.ivIsProxy;
   const volatility = computeVolatilityMetrics(bars, atmIv);
   const em = spot * hv * Math.sqrt(daysToExpiry / 365);
   const expectedRange: [number, number] = [Math.round((spot - em) * 100) / 100, Math.round((spot + em) * 100) / 100];
 
   const step = spot > 1000 ? 50 : spot > 500 ? 20 : 10;
   const isSelling = strategyMode.includes("sell") || strategyMode === "selling" || strategyMode === "neutral";
+  const suppressNearestSells = Boolean(resolved.includeNextChain && isSelling);
 
   const expiryLegs = nearestExpiry
     ? liveLegs.filter((l) => l.expiry === nearestExpiry)
@@ -503,6 +572,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     hv,
     step,
     isSelling,
+    focusStatus: focusPre.status,
   };
 
   const strikes = buildStrikeRecommendations({
@@ -510,6 +580,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     daysToExpiry,
     em,
     expiryLegs,
+    allowSells: !suppressNearestSells,
   });
 
   let nextExpiryChain: {
@@ -548,7 +619,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
       ? expiryLegs
       : liveLegs;
   let strategy = null;
-  if (strategyMode === "neutral" && movementInsight.suitability !== "avoid") {
+  if (strategyMode === "neutral" && movementInsight.suitability !== "avoid" && focusPre.status !== "avoid") {
     strategy = {
       name: "Iron Condor",
       reason: `Range-bound stock (15d: ${movement.days_15}%, 30d: ${movement.days_30}%) — sell OTM call and put outside expected move.`,
@@ -617,13 +688,19 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     atmIv,
     trend,
     optionType: optionType as "call" | "put",
-    legs: statsLegsSource.map((l) => ({
-      strike: l.strike,
-      ltp: l.ltp,
-      iv: l.iv,
-      type: l.type,
-    })),
-    earnings: await fetchUpcomingEarnings(sym),
+    strategyMode,
+    ivIsProxy,
+    legs: enrichLegsWithImpliedVol(
+      statsLegsSource.map((l) => ({
+        strike: l.strike,
+        ltp: l.ltp,
+        iv: l.iv,
+        type: l.type,
+        expiry: l.expiry,
+      })),
+      spot,
+    ),
+    earnings: earningsEarly,
   });
 
   const earnings = stats.focus.earnings;
@@ -675,6 +752,11 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
   }
   if (statsUseNext && statsExpiry) {
     note += ` Strike stats use next expiry (${statsExpiry}) for selling with limited runway on the current series.`;
+  }
+  if (focusPre.status === "avoid") {
+    note += ` Focus: ${focusPre.label} — fresh premium selling blocked.`;
+  } else if (suppressNearestSells) {
+    note += ` Nearest expiry has only ${daysToExpiry} DTE — sell picks suppressed on current series; use next expiry below.`;
   }
 
   return {
