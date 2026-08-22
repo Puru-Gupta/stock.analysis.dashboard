@@ -13,6 +13,7 @@ import DataIntelPanel from "@/components/DataIntelPanel";
 import SellerAssistant from "@/components/SellerAssistant";
 import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
 import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
+import ExpiryOutliersPanel from "@/components/ExpiryOutliersPanel";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -287,7 +288,9 @@ export default function OptionsPage() {
           <p className="page-subtitle">
             {subTab === "seller"
               ? "Should I sell this option right now? One score, one answer."
-              : "Probability-based decision support for option selling"}
+              : subTab === "expiry-outliers"
+                ? "Expiry-week survivability, outlier detection, and event context for indices & F&O stocks."
+                : "Probability-based decision support for option selling"}
           </p>
         </div>
         {subTab === "analysis" && <OptionsInterpretationGuideButton className="shrink-0" />}
@@ -298,6 +301,7 @@ export default function OptionsPage() {
           [
             { value: "analysis", label: "Analysis" },
             { value: "seller", label: "Selling Assistant" },
+            { value: "expiry-outliers", label: "Expiry Outliers" },
           ] as const
         ).map(({ value, label }) => (
           <button
@@ -319,6 +323,8 @@ export default function OptionsPage() {
       <Disclaimer />
 
       {subTab === "seller" && <SellerAssistant />}
+
+      {subTab === "expiry-outliers" && <ExpiryOutliersPanel />}
 
       {subTab === "analysis" && (
       <>

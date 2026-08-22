@@ -562,3 +562,48 @@ export interface PortfolioSnapshotRow {
   holdings_count: number;
   snapshot_at: string;
 }
+
+export interface ExpiryWeekRow {
+  start_date: string;
+  end_date: string;
+  return_pct: number;
+  mfe_pct: number;
+  mae_pct: number;
+  sigma_move_pct: number;
+  strangle_survived: boolean;
+  events: { label: string; category: string }[];
+  status: "within" | "upside_outlier" | "downside_outlier";
+}
+
+export interface ExpiryOutliersResult {
+  symbol: string;
+  label: string;
+  universe: "index" | "stock";
+  cadence: "weekly" | "monthly";
+  return_mode: "oc" | "hl";
+  expiry_day: "thursday" | "tuesday" | "mixed";
+  start_date: string;
+  end_date: string;
+  coverage_pct: number;
+  lower_percentile: number;
+  upper_percentile: number;
+  lower_boundary_pct: number;
+  upper_boundary_pct: number;
+  total_expiries: number;
+  total_outliers: number;
+  downside_outliers: number;
+  upside_outliers: number;
+  outlier_rate_pct: number;
+  strangle_survival_rate_pct: number;
+  avg_mfe_pct: number;
+  avg_mae_pct: number;
+  rows: ExpiryWeekRow[];
+  note?: string;
+}
+
+export interface ExpiryNewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  source?: string;
+}
