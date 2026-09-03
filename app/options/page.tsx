@@ -14,6 +14,7 @@ import SellerAssistant from "@/components/SellerAssistant";
 import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
 import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import ExpiryOutliersPanel from "@/components/ExpiryOutliersPanel";
+import MarketNewsPanel from "@/components/MarketNewsPanel";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -290,7 +291,9 @@ export default function OptionsPage() {
               ? "Should I sell this option right now? One score, one answer."
               : subTab === "expiry-outliers"
                 ? "Expiry-week survivability, outlier detection, and event context for indices & F&O stocks."
-                : "Probability-based decision support for option selling"}
+                : subTab === "market-news"
+                  ? "India & global market news rated by importance for option sellers."
+                  : "Probability-based decision support for option selling"}
           </p>
         </div>
         {subTab === "analysis" && <OptionsInterpretationGuideButton className="shrink-0" />}
@@ -302,6 +305,7 @@ export default function OptionsPage() {
             { value: "analysis", label: "Analysis" },
             { value: "seller", label: "Selling Assistant" },
             { value: "expiry-outliers", label: "Expiry Outliers" },
+            { value: "market-news", label: "Market News" },
           ] as const
         ).map(({ value, label }) => (
           <button
@@ -325,6 +329,8 @@ export default function OptionsPage() {
       {subTab === "seller" && <SellerAssistant />}
 
       {subTab === "expiry-outliers" && <ExpiryOutliersPanel />}
+
+      {subTab === "market-news" && <MarketNewsPanel />}
 
       {subTab === "analysis" && (
       <>

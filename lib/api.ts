@@ -607,3 +607,27 @@ export interface ExpiryNewsItem {
   pubDate: string;
   source?: string;
 }
+
+export type MarketNewsImportance = "very_important" | "important" | "less_important";
+
+export interface MarketNewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  source?: string;
+  importance: MarketNewsImportance;
+  importance_label: string;
+  score: number;
+  category: string;
+  category_label: string;
+  reason: string;
+  region: "india" | "global";
+}
+
+export interface MarketNewsResult {
+  items: MarketNewsItem[];
+  counts: Record<MarketNewsImportance, number>;
+  analyzed_at: string;
+  feeds_queried: number;
+  error?: string;
+}
