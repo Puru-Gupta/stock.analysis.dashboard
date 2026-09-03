@@ -14,6 +14,8 @@ export async function GET() {
         counts: { very_important: 0, important: 0, less_important: 0 },
         analyzed_at: new Date().toISOString(),
         feeds_queried: 0,
+        headlines_fetched: 0,
+        unique_stories: 0,
         error: e instanceof Error ? e.message : "Market news fetch failed",
       },
       { status: 200 },

@@ -1,4 +1,5 @@
 import { fetchGoogleNewsRss, type RssItem } from "@/lib/data/rss";
+import { inferStoryKey, marketImpactForStory } from "@/lib/data/news-market-impact";
 
 export type NewsImportance = "very_important" | "important" | "less_important";
 
@@ -23,6 +24,11 @@ export interface MarketNewsItem {
   category_label: string;
   reason: string;
   region: "india" | "global";
+  story_key: string;
+  related_count: number;
+  related_sources: string[];
+  market_impact: string;
+  seller_action: string;
 }
 
 export interface MarketNewsResult {
@@ -30,6 +36,8 @@ export interface MarketNewsResult {
   counts: Record<NewsImportance, number>;
   analyzed_at: string;
   feeds_queried: number;
+  headlines_fetched: number;
+  unique_stories: number;
 }
 
 const FEEDS: { query: string; region: "IN" | "US"; defaultCategory: NewsCategory }[] = [
@@ -38,14 +46,10 @@ const FEEDS: { query: string; region: "IN" | "US"; defaultCategory: NewsCategory
   { query: "Nifty Sensex FII DII India stock market", region: "IN", defaultCategory: "india_macro" },
   { query: "India earnings quarterly results profit revenue", region: "IN", defaultCategory: "india_corporate" },
   { query: "Hero MotoCorp Maruti Tata Motors auto sales dispatches units", region: "IN", defaultCategory: "sector_auto" },
-  { query: "HDFC ICICI SBI banking credit India", region: "IN", defaultCategory: "india_corporate" },
   { query: "Federal Reserve US inflation jobs report recession", region: "US", defaultCategory: "global_macro" },
   { query: "US China tariffs trade war sanctions geopolitical", region: "US", defaultCategory: "geopolitical" },
   { query: "crude oil gold dollar rupee forex commodity", region: "IN", defaultCategory: "commodities_fx" },
-  { query: "Middle East war oil supply shock markets", region: "US", defaultCategory: "geopolitical" },
-  { query: "SEBI NSE BSE India regulation circuit", region: "IN", defaultCategory: "india_macro" },
   { query: "Union Budget India fiscal deficit", region: "IN", defaultCategory: "india_macro" },
-  { query: "India business corporate general news", region: "IN", defaultCategory: "general" },
 ];
 
 const VERY_IMPORTANT: { pattern: RegExp; reason: string; category?: NewsCategory }[] = [
@@ -170,6 +174,11 @@ function scoreItem(
     category_label: CATEGORY_LABELS[category],
     reason,
     region: feedRegion === "IN" ? "india" : "global",
+    story_key: inferStoryKey(title),
+    related_count: 1,
+    related_sources: item.source ? [item.source] : [],
+    market_impact: "",
+    seller_action: "",
   };
 }
 
@@ -181,6 +190,46 @@ function dedupeItems(items: MarketNewsItem[]): MarketNewsItem[] {
     if (!existing || item.score > existing.score) seen.set(key, item);
   }
   return [...seen.values()];
+}
+
+/** Collapse same-story headlines (e.g. 8 RBI MPC copies → 1 with outlet count). */
+function clusterByStory(items: MarketNewsItem[]): MarketNewsItem[] {
+  const groups = new Map<string, MarketNewsItem[]>();
+  for (const item of items) {
+    const key = inferStoryKey(item.title);
+    const list = groups.get(key) || [];
+    list.push(item);
+    groups.set(key, list);
+  }
+
+  const clustered: MarketNewsItem[] = [];
+  for (const [, group] of groups) {
+    group.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return Date.parse(b.pubDate || "0") - Date.parse(a.pubDate || "0");
+    });
+    const best = group[0];
+    const storyKey = inferStoryKey(best.title);
+    const sources = [...new Set(group.map((g) => g.source).filter(Boolean))] as string[];
+    const impact = marketImpactForStory(storyKey, best.title);
+
+    clustered.push({
+      ...best,
+      story_key: storyKey,
+      related_count: group.length,
+      related_sources: sources.slice(0, 6),
+      market_impact: impact.market_impact,
+      seller_action: impact.seller_action,
+    });
+  }
+
+  return clustered.sort((a, b) => {
+    const rank: Record<NewsImportance, number> = { very_important: 3, important: 2, less_important: 1 };
+    const dr = rank[b.importance] - rank[a.importance];
+    if (dr !== 0) return dr;
+    if (b.related_count !== a.related_count) return b.related_count - a.related_count;
+    return Date.parse(b.pubDate || "0") - Date.parse(a.pubDate || "0");
+  });
 }
 
 export async function fetchMarketNews(): Promise<MarketNewsResult> {
@@ -197,19 +246,20 @@ export async function fetchMarketNews(): Promise<MarketNewsResult> {
   }
 
   const deduped = dedupeItems(merged);
+  const clustered = clusterByStory(deduped);
+
   const fullCounts: Record<NewsImportance, number> = {
-    very_important: deduped.filter((i) => i.importance === "very_important").length,
-    important: deduped.filter((i) => i.importance === "important").length,
-    less_important: deduped.filter((i) => i.importance === "less_important").length,
+    very_important: clustered.filter((i) => i.importance === "very_important").length,
+    important: clustered.filter((i) => i.importance === "important").length,
+    less_important: clustered.filter((i) => i.importance === "less_important").length,
   };
 
-  const byTier = (tier: NewsImportance) =>
-    deduped.filter((i) => i.importance === tier).sort((a, b) => Date.parse(b.pubDate || "0") - Date.parse(a.pubDate || "0"));
+  const byTier = (tier: NewsImportance) => clustered.filter((i) => i.importance === tier);
 
   const items = [
-    ...byTier("very_important").slice(0, 25),
-    ...byTier("important").slice(0, 40),
-    ...byTier("less_important").slice(0, 20),
+    ...byTier("very_important").slice(0, 12),
+    ...byTier("important").slice(0, 20),
+    ...byTier("less_important").slice(0, 10),
   ];
 
   return {
@@ -217,5 +267,7 @@ export async function fetchMarketNews(): Promise<MarketNewsResult> {
     counts: fullCounts,
     analyzed_at: new Date().toISOString(),
     feeds_queried: FEEDS.length,
+    headlines_fetched: merged.length,
+    unique_stories: clustered.length,
   };
 }

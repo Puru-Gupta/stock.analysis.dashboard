@@ -622,6 +622,11 @@ export interface MarketNewsItem {
   category_label: string;
   reason: string;
   region: "india" | "global";
+  story_key: string;
+  related_count: number;
+  related_sources: string[];
+  market_impact: string;
+  seller_action: string;
 }
 
 export interface MarketNewsResult {
@@ -629,5 +634,7 @@ export interface MarketNewsResult {
   counts: Record<MarketNewsImportance, number>;
   analyzed_at: string;
   feeds_queried: number;
+  headlines_fetched?: number;
+  unique_stories?: number;
   error?: string;
 }

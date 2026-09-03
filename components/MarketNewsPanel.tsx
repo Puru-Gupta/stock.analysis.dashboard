@@ -141,8 +141,8 @@ export default function MarketNewsPanel() {
               Market News Radar
             </h3>
             <p className="text-xs max-w-2xl" style={{ color: "var(--fg-tertiary)" }}>
-              India &amp; global headlines that can move Nifty, Bank Nifty and F&amp;O stocks — GDP, RBI, Fed,
-              auto sales, earnings, crude, geopolitics. Rated so you don&apos;t miss what matters for option selling.
+              India &amp; global headlines deduplicated by story — one entry per event (GDP, RBI, auto sales, etc.)
+              with expert read on market impact and what it means for option sellers.
             </p>
           </div>
           <button type="button" onClick={load} className="btn-secondary flex items-center gap-2 text-xs shrink-0">
@@ -154,7 +154,8 @@ export default function MarketNewsPanel() {
         {data && (
           <p className="text-[0.625rem] font-mono mb-4" style={{ color: "var(--fg-muted)" }}>
             Updated {new Date(data.analyzed_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST ·{" "}
-            {data.feeds_queried} feeds
+            {data.unique_stories ?? data.items.length} unique stories
+            {data.headlines_fetched != null ? ` from ${data.headlines_fetched} headlines` : ""}
           </p>
         )}
 
@@ -237,7 +238,7 @@ export default function MarketNewsPanel() {
           <ul className="space-y-3">
             {items.map((item) => (
               <li
-                key={item.link}
+                key={item.story_key}
                 className="rounded-lg border border-[var(--border)] p-3"
                 style={{ background: tier === "very_important" ? "rgba(239,68,68,0.04)" : undefined }}
               >
@@ -249,6 +250,14 @@ export default function MarketNewsPanel() {
                   >
                     {item.category_label}
                   </span>
+                  {item.related_count > 1 && (
+                    <span
+                      className="text-[0.625rem] rounded px-1.5 py-0.5"
+                      style={{ background: "rgba(245,78,0,0.1)", color: "var(--accent)" }}
+                    >
+                      {item.related_count} outlets reporting
+                    </span>
+                  )}
                   <span className="flex items-center gap-1 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
                     {item.region === "global" ? <Globe className="h-3 w-3" /> : null}
                     {item.region === "india" ? "India" : "Global"}
@@ -271,6 +280,24 @@ export default function MarketNewsPanel() {
                 <p className="mt-1.5 text-xs" style={{ color: "var(--fg-tertiary)" }}>
                   <strong style={{ color: "var(--fg-secondary)" }}>Why it matters:</strong> {item.reason}
                 </p>
+                {item.market_impact && (
+                  <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--fg-secondary)" }}>
+                    <strong style={{ color: "var(--fg-primary)" }}>Market impact:</strong> {item.market_impact}
+                  </p>
+                )}
+                {item.seller_action && (
+                  <p
+                    className="mt-1.5 text-xs leading-relaxed rounded px-2 py-1.5"
+                    style={{ color: "var(--fg-secondary)", background: "var(--bg-secondary)" }}
+                  >
+                    <strong style={{ color: "var(--amber)" }}>For option sellers:</strong> {item.seller_action}
+                  </p>
+                )}
+                {item.related_sources.length > 1 && (
+                  <p className="mt-1.5 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
+                    Also reported by: {item.related_sources.slice(1).join(" · ")}
+                  </p>
+                )}
                 {(item.source || item.pubDate) && (
                   <p className="mt-1 text-[0.625rem] font-mono" style={{ color: "var(--fg-muted)" }}>
                     {item.source}
@@ -285,9 +312,9 @@ export default function MarketNewsPanel() {
       ))}
 
       <p className="text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-        Headlines aggregated via Google News RSS across India macro, corporate, auto, global macro &amp; geopolitical
-        feeds. Importance is rule-based (GDP, RBI, Fed, sales data, earnings, etc.) — verify before trading. Not
-        investment advice.
+        Stories are clustered so the same event (e.g. RBI MPC, GDP print) appears once. Market impact commentary is
+        rule-based expert guidance for Indian F&amp;O — verify headlines and price action before trading. Not investment
+        advice.
       </p>
     </div>
   );
