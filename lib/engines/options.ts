@@ -1,4 +1,6 @@
-import { fetchLiveMarketBundle } from "@/lib/data/agents/orchestrator";
+import { fetchLiveMarketBundle, fetchLiveOptionChain } from "@/lib/data/agents/orchestrator";
+import type { AgentOptionLeg } from "@/lib/data/agents/types";
+import type { OHLCVBar } from "@/lib/data/types";
 import { getPriceHistory } from "@/lib/data/sync";
 import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
@@ -16,8 +18,13 @@ import {
   legPremiumAtExpiry,
 } from "./premium-decay";
 import { resolveOptionExpiries } from "./chain-expiry";
-import { computeOptionStats } from "./option-stats";
+import { computeOptionStats, type OptionStatsBundle } from "./option-stats";
 import { assessStockFocus } from "./stock-focus";
+import { analyzeChainSurface, quickChainIv } from "./chain-analytics";
+import { compareVolMetrics } from "./vol-metrics";
+import { empiricalOtmRate, empiricalStrangleSurvival } from "./empirical-pop";
+import { getIndiaVixRegime } from "./india-vix";
+import { buildQuantSignals } from "./quant-signals";
 
 export interface PriceMovement {
   days_7: number;
@@ -703,6 +710,21 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     earnings: earningsEarly,
   });
 
+  const vixRegime = await getIndiaVixRegime();
+  const empStrike = (stats.recommendation?.suggested_strike as number | undefined) || undefined;
+  attachQuantToStats(
+    stats,
+    bars,
+    spot,
+    atmIv,
+    ivIsProxy,
+    optionType as "call" | "put",
+    chain?.legs ?? [],
+    chain?.expiries ?? [],
+    vixRegime,
+    empStrike,
+  );
+
   const earnings = stats.focus.earnings;
   const decaySource =
     statsUseNext && nextExpiryChain?.recommendations.length
@@ -798,6 +820,40 @@ function roundStrike(price: number, step: number) {
   return Math.round(price / step) * step;
 }
 
+function attachQuantToStats(
+  stats: OptionStatsBundle,
+  bars: OHLCVBar[],
+  spot: number,
+  atmIv: number,
+  ivIsProxy: boolean,
+  optionType: "call" | "put",
+  legs: AgentOptionLeg[],
+  expiries: string[],
+  vix: Awaited<ReturnType<typeof getIndiaVixRegime>>,
+  strikeForEmpirical?: number,
+): OptionStatsBundle {
+  const hv = stats.volatility.hv_20 / 100;
+  const surface = legs.length ? analyzeChainSurface(legs, spot, expiries, hv) : null;
+  const volCompare = compareVolMetrics(bars, ivIsProxy ? null : atmIv, ivIsProxy);
+  const step = spot > 5000 ? 50 : spot > 1000 ? 20 : 10;
+  const strike = strikeForEmpirical ?? roundStrike(spot, step);
+  const emp = empiricalOtmRate(bars, strike, spot, optionType);
+  const sigmaPct = hv * Math.sqrt(5 / 252) * 100;
+  const strangle = empiricalStrangleSurvival(bars, spot, sigmaPct);
+  stats.quant = buildQuantSignals({
+    stats,
+    volCompare,
+    surface,
+    vix,
+    empiricalPopPct: emp.samples >= 8 ? emp.rate_pct : null,
+    empiricalSamples: emp.samples,
+    empiricalStranglePct: strangle.samples >= 8 ? strangle.rate_pct : null,
+    liveIv: !ivIsProxy,
+    optionType,
+  });
+  return stats;
+}
+
 export async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R | null>): Promise<R[]> {
   const out: (R | null)[] = new Array(items.length);
   let next = 0;
@@ -878,6 +934,12 @@ export interface OptionStatsPick {
   earnings_date?: string;
   earnings_days?: number;
   earnings_label?: string;
+  quant_score?: number;
+  quant_label?: string;
+  live_iv?: boolean;
+  pcr_oi?: number | null;
+  skew_25d?: number | null;
+  empirical_pop?: number | null;
 }
 
 function regimeScoreBonus(regime: string) {
@@ -888,45 +950,83 @@ function regimeScoreBonus(regime: string) {
   return 0;
 }
 
-/** Rank liquid names by statistical option-selling score (vol, regime, confidence, stretch). */
+/** Rank liquid names by statistical option-selling score (vol, regime, confidence, stretch, quant signals). */
 export async function scanOptionStatsUniverse(optionType = "call", limit = 50): Promise<OptionStatsPick[]> {
   const liquid = NIFTY_50;
+  const vixRegime = await getIndiaVixRegime();
 
-  const results = await mapPool(liquid, 8, async (sym) => {
+  const results = await mapPool(liquid, 3, async (sym) => {
     try {
       const { bars } = await getPriceHistory(sym, 280);
       if (bars.length < 40) return null;
       const spot = bars.at(-1)!.close;
       const trend = detectTrend(bars);
       const hv = historicalVol(bars);
+
+      let atmIv = hv;
+      let ivIsProxy = true;
+      let dte = 30;
+      let legs: AgentOptionLeg[] = [];
+      let expiries: string[] = [];
+      try {
+        const chain = await fetchLiveOptionChain(sym);
+        if (chain.ok && chain.legs.length) {
+          legs = chain.legs;
+          expiries = chain.expiries;
+          const q = quickChainIv(chain.legs, chain.expiries, spot, hv);
+          atmIv = q.atmIv;
+          ivIsProxy = q.ivIsProxy;
+          dte = q.dte;
+        }
+      } catch {
+        /* NSE rate limit / timeout — HV fallback */
+      }
+
       const stats = computeOptionStats({
         bars,
         spot,
-        daysToExpiry: 30,
-        atmIv: hv,
+        daysToExpiry: dte,
+        atmIv,
         trend,
         optionType: optionType as "call" | "put",
-        legs: [],
+        legs: legs.map((l) => ({
+          strike: l.strike,
+          ltp: l.ltp,
+          iv: l.iv,
+          type: l.type,
+          expiry: l.expiry,
+        })),
+        ivIsProxy,
         earnings: await fetchUpcomingEarnings(sym),
       });
 
+      attachQuantToStats(stats, bars, spot, atmIv, ivIsProxy, optionType as "call" | "put", legs, expiries, vixRegime);
+
       const z1m = stats.distributions.find((d) => d.key === "1m")?.z_score ?? 0;
       let optionScore =
-        stats.volatility.seller_favorability * 0.4 +
-        (stats.confidence.score / 100) * 15 +
+        stats.volatility.seller_favorability * 0.35 +
+        (stats.confidence.score / 100) * 12 +
         regimeScoreBonus(stats.volatility_regime);
       optionScore -= Math.min(15, Math.abs(z1m) * 5);
       if (optionType === "call" && z1m > 1.5) optionScore -= 8;
       if (optionType === "put" && z1m < -1.5) optionScore -= 8;
       if (trend === "neutral" || stats.health.trend_label === "Sideways") optionScore += 5;
 
+      if (stats.quant) {
+        optionScore = optionScore * 0.55 + stats.quant.quant_score * 0.45;
+        if (!stats.quant.live_iv) optionScore *= 0.94;
+      }
+
       const why: string[] = [];
+      if (stats.quant?.live_iv) why.push("live IV");
+      if (stats.quant && stats.quant.quant_score >= 70) why.push("quant edge");
       if (stats.volatility.seller_favorability >= 55) why.push("strong vol edge");
       else if (stats.volatility.iv_above_hv) why.push("IV > HV");
       if (stats.volatility_regime === "Quiet" || stats.volatility_regime === "Very Quiet") why.push("quiet regime");
       if (stats.confidence.score >= 70) why.push("reliable stats");
       if (Math.abs(z1m) < 1) why.push("price near mean");
       else if (Math.abs(z1m) >= 1.5) why.push(`stretched ${z1m > 0 ? "+" : ""}${z1m}σ`);
+      if (stats.quant?.skew_25d != null && stats.quant.skew_25d > 4) why.push("put skew");
 
       const focus = stats.focus;
 
@@ -953,6 +1053,12 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 50): 
         earnings_date: focus.earnings?.date,
         earnings_days: focus.earnings?.days_away,
         earnings_label: focus.earnings?.label,
+        quant_score: stats.quant?.quant_score,
+        quant_label: stats.quant?.quant_label,
+        live_iv: stats.quant?.live_iv,
+        pcr_oi: stats.quant?.pcr_oi,
+        skew_25d: stats.quant?.skew_25d,
+        empirical_pop: stats.quant?.empirical_pop_pct,
       };
     } catch {
       return null;

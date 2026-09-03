@@ -93,6 +93,17 @@ export function eventsForWindow(windowStart: string, windowEnd: string): MarketE
   });
 }
 
+/** Macro events within ±days of today (for focus / sell gates). */
+export function macroEventsNearToday(daysAhead = 7, daysBack = 2): MarketEvent[] {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - daysBack);
+  const end = new Date(now);
+  end.setDate(end.getDate() + daysAhead);
+  const toIso = (d: Date) => d.toISOString().split("T")[0];
+  return eventsForWindow(toIso(start), toIso(end));
+}
+
 /** Events in a calendar range (for chart band annotations). */
 export function eventsInRange(rangeStart: string, rangeEnd: string): MarketEvent[] {
   return eventsForWindow(rangeStart, rangeEnd);

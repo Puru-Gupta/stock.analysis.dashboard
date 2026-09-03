@@ -126,6 +126,8 @@ export interface SmartAlert {
   detail: string;
 }
 
+import type { QuantSignalBundle } from "./quant-signals";
+
 export interface OptionStatsBundle {
   distributions: TimeframeDistribution[];
   comparison: Pick<TimeframeDistribution, "label" | "z_score" | "percentile" | "signal">[];
@@ -140,6 +142,7 @@ export interface OptionStatsBundle {
   recommendation: SellerRecommendation;
   alerts: SmartAlert[];
   focus: StockFocusAssessment;
+  quant?: QuantSignalBundle;
 }
 
 function ivRankFromHvSeries(bars: OHLCVBar[], currentIv: number) {

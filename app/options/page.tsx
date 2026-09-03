@@ -493,6 +493,7 @@ export default function OptionsPage() {
                   <th>#</th>
                   <th>Stock</th>
                   <th>Focus</th>
+                  <th>Quant</th>
                   <th>Option Score</th>
                   <th>Vol Score</th>
                   <th>IV Rank</th>
@@ -525,6 +526,16 @@ export default function OptionsPage() {
                         earningsDays={p.earnings_days}
                       />
                     </td>
+                    <td className="font-mono text-xs tabular-nums">
+                      {p.quant_score != null ? (
+                        <span title={p.quant_label}>
+                          {p.quant_score}
+                          {p.live_iv ? "" : "*"}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="font-mono tabular-nums text-base" style={{ color: p.option_score >= 60 ? "var(--green)" : p.option_score >= 45 ? "var(--accent)" : "var(--fg-primary)" }}>
                       {p.option_score}
                     </td>
@@ -545,6 +556,7 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
+          Quant score blends live NSE IV (when available), GK range vol, smile skew, PCR, India VIX regime, empirical OTM rate &amp; focus/events. * = HV proxy (no live chain).
           Click a row for full analysis. Prefer <strong>Clean</strong> focus — skip <strong>Results soon</strong> / <strong>News / odd</strong> unless using very wide strikes.
         </p>
       </div>

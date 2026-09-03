@@ -163,11 +163,64 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
   const stats = analysis.stats;
   if (!stats) return null;
 
-  const { volatility, health, recommendation, alerts, mean_reversion, confidence, focus } = stats;
+  const { volatility, health, recommendation, alerts, mean_reversion, confidence, focus, quant } = stats;
   const riskColor = recommendation.risk === "Low" ? "green" : recommendation.risk === "Medium" ? "yellow" : "red";
 
   return (
     <div className="page-stack">
+      {quant && (
+        <div className="card" style={{ borderColor: quant.quant_score >= 65 ? "rgba(31,138,101,0.35)" : "var(--border)" }}>
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
+                Quant Signal
+              </p>
+              <p className="mt-1 text-lg font-medium" style={{ color: "var(--fg-primary)" }}>
+                {quant.quant_label}{" "}
+                <span className="font-mono text-base tabular-nums" style={{ color: quant.quant_score >= 65 ? "var(--green)" : "var(--amber)" }}>
+                  {quant.quant_score}/100
+                </span>
+              </p>
+            </div>
+            <div className="text-right text-xs font-mono" style={{ color: "var(--fg-muted)" }}>
+              {quant.india_vix != null && <p>India VIX {quant.india_vix.toFixed(1)}</p>}
+              <p>{quant.vix_regime}</p>
+              <p>Size: {quant.sell_size_pct}%</p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs font-mono mb-3">
+            <div>GK HV {quant.hv_gk_pct}% {quant.iv_hv_gk_ratio != null && `· IV/GK ${quant.iv_hv_gk_ratio}×`}</div>
+            <div>PCR {quant.pcr_oi ?? "—"} · Skew {quant.skew_25d != null ? `${quant.skew_25d}pp` : "—"}</div>
+            <div>Term {quant.term_structure ?? "—"} {quant.max_pain != null && `· Max pain ₹${quant.max_pain}`}</div>
+            <div>
+              Empirical OTM {quant.empirical_pop_pct != null ? `${quant.empirical_pop_pct}%` : "—"}
+              {quant.empirical_strangle_survival_pct != null && ` · ±1σ surv ${quant.empirical_strangle_survival_pct}%`}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {quant.chips.map((c) => (
+              <span
+                key={c.id}
+                className="rounded px-1.5 py-0.5 text-[0.625rem]"
+                style={{
+                  background:
+                    c.tone === "positive"
+                      ? "rgba(31,138,101,0.12)"
+                      : c.tone === "negative"
+                        ? "rgba(220,38,38,0.1)"
+                        : "var(--bg-secondary)",
+                  color: c.tone === "positive" ? "var(--green)" : c.tone === "negative" ? "var(--red)" : "var(--fg-secondary)",
+                }}
+              >
+                {c.label}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--fg-secondary)" }}>
+            <strong style={{ color: "var(--amber)" }}>Seller action:</strong> {quant.seller_action}
+          </p>
+        </div>
+      )}
       {(focus && focus.status !== "clean") || (focus?.earnings && focus.earnings.days_away <= 21) ? (
         <div
           className="card"

@@ -1,5 +1,6 @@
 import type { OHLCVBar } from "@/lib/data/types";
 import type { UpcomingEarnings } from "@/lib/data/earnings-calendar";
+import { macroEventsNearToday } from "@/lib/data/market-events";
 import { historicalVol } from "./options";
 
 export type FocusStatus = "clean" | "caution" | "avoid";
@@ -102,6 +103,18 @@ export function assessStockFocus(input: {
       tags.push(`Results ${earnings.label}${est}`);
       severity += 1;
     }
+  }
+
+  const macroNear = macroEventsNearToday(7, 2);
+  for (const ev of macroNear.slice(0, 2)) {
+    const cat =
+      ev.category === "budget" || ev.category === "rbi"
+        ? 3
+        : ev.category === "election" || ev.category === "geopolitical"
+          ? 2
+          : 1;
+    tags.push(ev.label);
+    severity += cat;
   }
 
   const hasNewsSignature = tags.some((t) =>

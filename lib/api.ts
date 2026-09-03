@@ -342,6 +342,12 @@ export interface OptionStatsPick {
   earnings_date?: string;
   earnings_days?: number;
   earnings_label?: string;
+  quant_score?: number;
+  quant_label?: string;
+  live_iv?: boolean;
+  pcr_oi?: number | null;
+  skew_25d?: number | null;
+  empirical_pop?: number | null;
 }
 
 export interface OptionRec {
