@@ -394,7 +394,10 @@ export default function OptionsPage() {
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setStrategyMode(value)}
+                  onClick={() => {
+                    setStrategyMode(value);
+                    if (analysis) analyze(undefined, value);
+                  }}
                   className={`pill ${strategyMode === value ? "pill-active" : ""}`}
                   aria-pressed={strategyMode === value}
                 >

@@ -53,6 +53,22 @@ export function empiricalOtmRate(
   };
 }
 
+/** Historical % of weekly expiries where spot finished ITM vs strike (inverse of OTM). */
+export function empiricalItmRate(
+  bars: OHLCVBar[],
+  strike: number,
+  spot: number,
+  optionType: "call" | "put",
+  lookbackYears = 3,
+): { rate_pct: number; samples: number; label: string } {
+  const otm = empiricalOtmRate(bars, strike, spot, optionType, lookbackYears);
+  return {
+    rate_pct: r1(100 - otm.rate_pct),
+    samples: otm.samples,
+    label: otm.samples >= 8 ? `${(100 - otm.rate_pct).toFixed(0)}% historical ITM at expiry` : otm.label,
+  };
+}
+
 /** Empirical rate for ATM-ish weekly strangle survival (both wings). */
 export function empiricalStrangleSurvival(
   bars: OHLCVBar[],

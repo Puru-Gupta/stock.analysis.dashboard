@@ -22,7 +22,7 @@ import { computeOptionStats, type OptionStatsBundle } from "./option-stats";
 import { assessStockFocus } from "./stock-focus";
 import { analyzeChainSurface, quickChainIv } from "./chain-analytics";
 import { compareVolMetrics } from "./vol-metrics";
-import { empiricalOtmRate, empiricalStrangleSurvival } from "./empirical-pop";
+import { empiricalOtmRate, empiricalStrangleSurvival, empiricalItmRate } from "./empirical-pop";
 import { getIndiaVixRegime } from "./india-vix";
 import { buildQuantSignals } from "./quant-signals";
 
@@ -723,6 +723,7 @@ export async function analyzeOptions(symbol: string, optionType = "call", strate
     chain?.expiries ?? [],
     vixRegime,
     empStrike,
+    strategyMode,
   );
 
   const earnings = stats.focus.earnings;
@@ -831,6 +832,7 @@ function attachQuantToStats(
   expiries: string[],
   vix: Awaited<ReturnType<typeof getIndiaVixRegime>>,
   strikeForEmpirical?: number,
+  strategyMode = "selling",
 ): OptionStatsBundle {
   const hv = stats.volatility.hv_20 / 100;
   const surface = legs.length ? analyzeChainSurface(legs, spot, expiries, hv) : null;
@@ -838,18 +840,23 @@ function attachQuantToStats(
   const step = spot > 5000 ? 50 : spot > 1000 ? 20 : 10;
   const strike = strikeForEmpirical ?? roundStrike(spot, step);
   const emp = empiricalOtmRate(bars, strike, spot, optionType);
+  const empItm = empiricalItmRate(bars, strike, spot, optionType);
   const sigmaPct = hv * Math.sqrt(5 / 252) * 100;
   const strangle = empiricalStrangleSurvival(bars, spot, sigmaPct);
+  const z1m = stats.distributions.find((d) => d.key === "1m")?.z_score ?? 0;
   stats.quant = buildQuantSignals({
     stats,
     volCompare,
     surface,
     vix,
     empiricalPopPct: emp.samples >= 8 ? emp.rate_pct : null,
+    empiricalItmPct: empItm.samples >= 8 ? empItm.rate_pct : null,
     empiricalSamples: emp.samples,
     empiricalStranglePct: strangle.samples >= 8 ? strangle.rate_pct : null,
     liveIv: !ivIsProxy,
     optionType,
+    strategyMode,
+    zScore1m: z1m,
   });
   return stats;
 }
@@ -1000,7 +1007,7 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 50): 
         earnings: await fetchUpcomingEarnings(sym),
       });
 
-      attachQuantToStats(stats, bars, spot, atmIv, ivIsProxy, optionType as "call" | "put", legs, expiries, vixRegime);
+      attachQuantToStats(stats, bars, spot, atmIv, ivIsProxy, optionType as "call" | "put", legs, expiries, vixRegime, undefined, "selling");
 
       const z1m = stats.distributions.find((d) => d.key === "1m")?.z_score ?? 0;
       let optionScore =

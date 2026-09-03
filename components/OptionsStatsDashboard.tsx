@@ -173,7 +173,7 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
           <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs uppercase tracking-wide" style={{ color: "var(--fg-muted)" }}>
-                Quant Signal
+                Quant Signal {quant.quant_mode === "buy" ? "(Buying)" : "(Selling)"}
               </p>
               <p className="mt-1 text-lg font-medium" style={{ color: "var(--fg-primary)" }}>
                 {quant.quant_label}{" "}
@@ -185,7 +185,7 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
             <div className="text-right text-xs font-mono" style={{ color: "var(--fg-muted)" }}>
               {quant.india_vix != null && <p>India VIX {quant.india_vix.toFixed(1)}</p>}
               <p>{quant.vix_regime}</p>
-              <p>Size: {quant.sell_size_pct}%</p>
+              <p>Size: {quant.quant_mode === "buy" ? quant.buy_size_pct : quant.sell_size_pct}%</p>
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs font-mono mb-3">
@@ -193,8 +193,16 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
             <div>PCR {quant.pcr_oi ?? "—"} · Skew {quant.skew_25d != null ? `${quant.skew_25d}pp` : "—"}</div>
             <div>Term {quant.term_structure ?? "—"} {quant.max_pain != null && `· Max pain ₹${quant.max_pain}`}</div>
             <div>
-              Empirical OTM {quant.empirical_pop_pct != null ? `${quant.empirical_pop_pct}%` : "—"}
-              {quant.empirical_strangle_survival_pct != null && ` · ±1σ surv ${quant.empirical_strangle_survival_pct}%`}
+              {quant.quant_mode === "buy" ? (
+                <>
+                  Empirical ITM {quant.empirical_itm_pct != null ? `${quant.empirical_itm_pct}%` : "—"}
+                </>
+              ) : (
+                <>
+                  Empirical OTM {quant.empirical_pop_pct != null ? `${quant.empirical_pop_pct}%` : "—"}
+                  {quant.empirical_strangle_survival_pct != null && ` · ±1σ surv ${quant.empirical_strangle_survival_pct}%`}
+                </>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -217,7 +225,10 @@ export default function OptionsStatsDashboard({ analysis }: { analysis: OptionsA
             ))}
           </div>
           <p className="text-xs leading-relaxed" style={{ color: "var(--fg-secondary)" }}>
-            <strong style={{ color: "var(--amber)" }}>Seller action:</strong> {quant.seller_action}
+            <strong style={{ color: quant.quant_mode === "buy" ? "var(--green)" : "var(--amber)" }}>
+              {quant.quant_mode === "buy" ? "For option buyers:" : "For option sellers:"}
+            </strong>{" "}
+            {quant.quant_mode === "buy" ? quant.buyer_action : quant.seller_action}
           </p>
         </div>
       )}
