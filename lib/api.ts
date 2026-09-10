@@ -348,6 +348,8 @@ export interface OptionStatsPick {
   pcr_oi?: number | null;
   skew_25d?: number | null;
   empirical_pop?: number | null;
+  recommended_strategy: string;
+  strategy_note: string;
 }
 
 export interface OptionRec {

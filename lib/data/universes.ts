@@ -171,6 +171,9 @@ export const NIFTY_100 = [
   ]),
 ];
 
+/** ~150 most liquid NSE F&O stocks (Nifty 100 + liquid midcap). */
+export const FNO_LIQUID_150 = [...new Set([...NIFTY_100, ...NIFTY_MIDCAP])].slice(0, 150);
+
 /** Liquid Nifty 500 proxy — union of Nifty 100 + Midcap + Smallcap (~250 names). */
 export const NIFTY_500 = [...new Set([...NIFTY_100, ...NIFTY_MIDCAP, ...NIFTY_SMALLCAP])];
 
@@ -201,6 +204,7 @@ export function resolveFuturisticSymbols(theme?: string, scope = "nifty500"): st
 export const UNIVERSES: Record<string, string[]> = {
   nifty50: NIFTY_50,
   nifty100: NIFTY_100,
+  fno150: FNO_LIQUID_150,
   nifty500: NIFTY_500,
   midcap: NIFTY_MIDCAP,
   smallcap: NIFTY_SMALLCAP,

@@ -228,7 +228,7 @@ export default function OptionsPage() {
     setStatsPicksLoading(true);
     try {
       const data = await fetchAPI<OptionStatsPick[]>(
-        `/api/options/stats/scan?option_type=${optionType}&limit=50`,
+        `/api/options/stats/scan?option_type=${optionType}&limit=150`,
       );
       setStatsPicks(data);
       setStatsPicksLoaded(true);
@@ -447,7 +447,7 @@ export default function OptionsPage() {
               Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Scans all 50 NIFTY names for IV edge, regime, and confidence.{" "}
+              Scans top 150 liquid F&amp;O names for IV edge, regime, and best strategy.{" "}
               <strong>Focus</strong> flags news/odd activity (gaps, vol spikes, large moves). Pick{" "}
               <strong>Clean</strong> names with the highest Option Score.
             </p>
@@ -481,7 +481,7 @@ export default function OptionsPage() {
           </div>
         </div>
         {statsPicksLoading && !statsPicksLoaded ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning all 50 NIFTY names…</p>
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning 150 liquid F&amp;O names… (may take 2–3 min)</p>
         ) : statsPicks.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
         ) : visibleStatsPicks.length === 0 ? (
@@ -505,6 +505,7 @@ export default function OptionsPage() {
                   <th>Conf.</th>
                   <th>Z (1M)</th>
                   <th>Trend</th>
+                  <th>Strategy</th>
                   <th className="table-cell-note">Why</th>
                 </tr>
               </thead>
@@ -551,6 +552,20 @@ export default function OptionsPage() {
                       {p.z_score_1m > 0 ? "+" : ""}{p.z_score_1m}
                     </td>
                     <td className="text-xs">{p.trend_label}</td>
+                    <td className="text-xs" title={p.strategy_note}>
+                      <span
+                        style={{
+                          color:
+                            p.recommended_strategy === "Wait"
+                              ? "var(--fg-muted)"
+                              : p.recommended_strategy.includes("Spread") || p.recommended_strategy === "Iron Condor"
+                                ? "var(--accent)"
+                                : "var(--green)",
+                        }}
+                      >
+                        {p.recommended_strategy || "—"}
+                      </span>
+                    </td>
                     <td className="table-cell-note">{p.reason || "—"}</td>
                   </tr>
                 ))}
@@ -559,8 +574,8 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-          Quant score blends live NSE IV (when available), GK range vol, smile skew, PCR, India VIX regime, empirical OTM rate &amp; focus/events. * = HV proxy (no live chain).
-          Click a row for full analysis. Prefer <strong>Clean</strong> focus — skip <strong>Results soon</strong> / <strong>News / odd</strong> unless using very wide strikes.
+          Scans 150 liquid F&amp;O stocks (Nifty 100 + midcap). <strong>Strategy</strong> column suggests the best structure (strangle, iron condor, spreads, wait) from regime, stretch, and IV. Quant * = HV proxy when NSE chain unavailable.
+          Click a row for full analysis. Prefer <strong>Clean</strong> focus — use <strong>Iron Condor / spreads</strong> when stretched or caution.
         </p>
       </div>
 

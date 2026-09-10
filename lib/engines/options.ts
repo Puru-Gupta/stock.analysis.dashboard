@@ -2,7 +2,8 @@ import { fetchLiveMarketBundle, fetchLiveOptionChain } from "@/lib/data/agents/o
 import type { AgentOptionLeg } from "@/lib/data/agents/types";
 import type { OHLCVBar } from "@/lib/data/types";
 import { getPriceHistory } from "@/lib/data/sync";
-import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
+import { FNO_LIQUID_150, NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
+import { pickBestOptionStrategy } from "./option-strategy-pick";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
 import {
@@ -947,6 +948,8 @@ export interface OptionStatsPick {
   pcr_oi?: number | null;
   skew_25d?: number | null;
   empirical_pop?: number | null;
+  recommended_strategy: string;
+  strategy_note: string;
 }
 
 function regimeScoreBonus(regime: string) {
@@ -957,12 +960,12 @@ function regimeScoreBonus(regime: string) {
   return 0;
 }
 
-/** Rank liquid names by statistical option-selling score (vol, regime, confidence, stretch, quant signals). */
-export async function scanOptionStatsUniverse(optionType = "call", limit = 50): Promise<OptionStatsPick[]> {
-  const liquid = NIFTY_50;
+/** Rank liquid F&O names by statistical option-selling score (vol, regime, confidence, stretch, quant signals). */
+export async function scanOptionStatsUniverse(optionType = "call", limit = 150): Promise<OptionStatsPick[]> {
+  const liquid = FNO_LIQUID_150;
   const vixRegime = await getIndiaVixRegime();
 
-  const results = await mapPool(liquid, 3, async (sym) => {
+  const results = await mapPool(liquid, 4, async (sym) => {
     try {
       const { bars } = await getPriceHistory(sym, 280);
       if (bars.length < 40) return null;
@@ -1039,6 +1042,20 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 50): 
 
       optionScore = Math.round(Math.min(100, Math.max(0, optionScore)));
 
+      const strategyPick = pickBestOptionStrategy({
+        optionType: optionType as "call" | "put",
+        regime: stats.volatility_regime,
+        trendLabel: stats.health.trend_label,
+        z1m,
+        ivRank: stats.volatility.iv_rank,
+        ivHvRatio: stats.volatility.iv_hv_ratio,
+        focusStatus: focus.status,
+        sellerVolScore: stats.volatility.seller_favorability,
+        quantScore: stats.quant?.quant_score,
+        empiricalPop: stats.quant?.empirical_pop_pct,
+        liveIv: stats.quant?.live_iv,
+      });
+
       return {
         symbol: sym,
         name: sym.replace(".NS", ""),
@@ -1066,6 +1083,8 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 50): 
         pcr_oi: stats.quant?.pcr_oi,
         skew_25d: stats.quant?.skew_25d,
         empirical_pop: stats.quant?.empirical_pop_pct,
+        recommended_strategy: strategyPick.recommended_strategy,
+        strategy_note: strategyPick.strategy_note,
       };
     } catch {
       return null;
