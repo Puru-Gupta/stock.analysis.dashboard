@@ -1,8 +1,12 @@
 import type { VolRegime } from "./option-stats";
 
+export type StrategySide = "put" | "call" | "both" | "na";
+
 export interface OptionStrategyPick {
   recommended_strategy: string;
   strategy_note: string;
+  /** Which option side the primary leg uses; "both" = strangle/condor */
+  strategy_side: StrategySide;
 }
 
 /**
@@ -46,6 +50,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: "Wait",
       strategy_note: "Earnings/news risk — skip fresh premium sales.",
+      strategy_side: "na",
     };
   }
 
@@ -53,6 +58,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: "Wait",
       strategy_note: "Weak vol edge — no compelling sell setup today.",
+      strategy_side: "na",
     };
   }
 
@@ -62,23 +68,27 @@ export function pickBestOptionStrategy(input: {
       return {
         recommended_strategy: "Iron Condor",
         strategy_note: `Price ${z1m > 0 ? "+" : ""}${z1m.toFixed(1)}σ stretched — use wings, not tight strangle.`,
+        strategy_side: "both",
       };
     }
     if (optionType === "put" && z1m < -1.2) {
       return {
         recommended_strategy: "Bull Put Spread",
         strategy_note: "Stretched down — sell put spread, not naked short put.",
+        strategy_side: "put",
       };
     }
     if (optionType === "call" && z1m > 1.2) {
       return {
         recommended_strategy: "Bear Call Spread",
         strategy_note: "Stretched up — sell call spread above resistance.",
+        strategy_side: "call",
       };
     }
     return {
       recommended_strategy: "Iron Condor",
       strategy_note: "Elevated stretch — defined risk only; widen strikes.",
+      strategy_side: "both",
     };
   }
 
@@ -88,11 +98,13 @@ export function pickBestOptionStrategy(input: {
       return {
         recommended_strategy: "Short Strangle",
         strategy_note: "Quiet, mean-centered, rich IV — classic weekly strangle if wings ≥1.5σ.",
+        strategy_side: "both",
       };
     }
     return {
       recommended_strategy: "Iron Condor",
       strategy_note: "Quiet range — iron condor safer than tight strangle when IV is modest.",
+      strategy_side: "both",
     };
   }
 
@@ -100,6 +112,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: "Iron Condor",
       strategy_note: "Low realized vol — collect premium inside expected move with wings.",
+      strategy_side: "both",
     };
   }
 
@@ -108,6 +121,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: richIv ? "Cash-Secured Put" : "Bull Put Spread",
       strategy_note: "Bullish bias — sell OTM puts below support; spread if IV is thin.",
+      strategy_side: "put",
     };
   }
 
@@ -115,6 +129,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: richIv ? "Sell OTM Call" : "Bear Call Spread",
       strategy_note: "Bearish bias — sell OTM calls; spread if premium is low.",
+      strategy_side: "call",
     };
   }
 
@@ -122,6 +137,7 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: optionType === "put" ? "Bull Put Spread" : "Bear Call Spread",
       strategy_note: `${regime} vol — sell spreads; size down per India VIX.`,
+      strategy_side: optionType,
     };
   }
 
@@ -129,11 +145,13 @@ export function pickBestOptionStrategy(input: {
     return {
       recommended_strategy: "Wait",
       strategy_note: "IV rank low — premiums thin; wait for richer vol or use spreads only.",
+      strategy_side: "na",
     };
   }
 
   return {
     recommended_strategy: optionType === "put" ? "Bull Put Spread" : "Bear Call Spread",
     strategy_note: "Selective credit spread — confirm live chain before entry.",
+    strategy_side: optionType,
   };
 }

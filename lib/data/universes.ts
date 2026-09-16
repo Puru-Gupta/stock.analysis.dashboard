@@ -216,8 +216,12 @@ export const INDEX_SYMBOL = "^NSEI";
 export const DEFAULT_WATCHLIST = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS"];
 
 export function normalizeSymbol(symbol: string): string {
-  if (symbol.startsWith("^") || symbol.endsWith(".NS")) return symbol.toUpperCase();
-  if (symbol === "NIFTY") return "^NSEI";
-  if (symbol === "BANKNIFTY") return "^NSEBANK";
-  return `${symbol.toUpperCase()}.NS`;
+  const s = symbol.toUpperCase();
+  if (s.startsWith("^") || s.endsWith(".NS")) return s;
+  if (s === "NIFTY" || s === "NSEI") return "^NSEI";
+  if (s === "BANKNIFTY" || s === "NSEBANK") return "^NSEBANK";
+  if (s === "FINNIFTY" || s === "CNXFIN") return "^CNXFIN";
+  if (s === "MIDCPNIFTY" || s === "NSMIDCP") return "^NSMIDCP";
+  if (s === "INDIAVIX") return "^INDIAVIX";
+  return `${s}.NS`;
 }

@@ -950,6 +950,7 @@ export interface OptionStatsPick {
   empirical_pop?: number | null;
   recommended_strategy: string;
   strategy_note: string;
+  strategy_side: "put" | "call" | "both" | "na";
 }
 
 function regimeScoreBonus(regime: string) {
@@ -1085,6 +1086,7 @@ export async function scanOptionStatsUniverse(optionType = "call", limit = 150):
         empirical_pop: stats.quant?.empirical_pop_pct,
         recommended_strategy: strategyPick.recommended_strategy,
         strategy_note: strategyPick.strategy_note,
+        strategy_side: strategyPick.strategy_side,
       };
     } catch {
       return null;

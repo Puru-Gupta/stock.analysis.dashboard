@@ -15,6 +15,7 @@ import OptionsStatsDashboard from "@/components/OptionsStatsDashboard";
 import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import ExpiryOutliersPanel from "@/components/ExpiryOutliersPanel";
 import MarketNewsPanel from "@/components/MarketNewsPanel";
+import IndexForecastPanel from "@/components/IndexForecastPanel";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -163,7 +164,7 @@ export default function OptionsPage() {
   const [statsPicksLoading, setStatsPicksLoading] = useState(false);
   const [error, setError] = useState("");
   const [statsPicksLoaded, setStatsPicksLoaded] = useState(false);
-  const [cleanOnly, setCleanOnly] = useState(false);
+  const [scanFilter, setScanFilter] = useState<"all" | "clean" | "live_premium">("all");
 
   const snapshotRef = useRef({
     symbol,
@@ -250,19 +251,21 @@ export default function OptionsPage() {
     loadStatsPicks();
   }, [cacheRestored, subTab, optionType, loadStatsPicks]);
 
-  const analyze = useCallback(async (symOverride?: string, modeOverride?: string) => {
+  const analyze = useCallback(async (symOverride?: string, modeOverride?: string, typeOverride?: string) => {
     const sym = symOverride ?? symbol;
     const mode = modeOverride ?? strategyMode;
+    const otype = typeOverride ?? optionType;
     if (modeOverride) setStrategyMode(modeOverride);
+    if (typeOverride) setOptionType(typeOverride);
     setSymbol(sym);
     setLoading(true);
     setError("");
     try {
       const data = await fetchAPI<OptionsAnalysis>(
-        `/api/options/analyze?symbol=${encodeURIComponent(sym)}&option_type=${optionType}&strategy_mode=${mode}&capital=${capital}&risk_level=${riskLevel}`
+        `/api/options/analyze?symbol=${encodeURIComponent(sym)}&option_type=${otype}&strategy_mode=${mode}&capital=${capital}&risk_level=${riskLevel}`
       );
       setAnalysis(data);
-      persist({ analysis: data, symbol: sym, optionType, strategyMode: mode, capital, riskLevel, analysisLoaded: true });
+      persist({ analysis: data, symbol: sym, optionType: otype, strategyMode: mode, capital, riskLevel, analysisLoaded: true });
       if (data.error) setError(data.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
@@ -277,9 +280,12 @@ export default function OptionsPage() {
     strategyMode === "neutral" ? "Neutral" :
     strategyMode === "buying" ? "Option Buying" : "Directional";
 
-  const visibleStatsPicks = cleanOnly
-    ? statsPicks.filter((p) => p.focus_status === "clean")
-    : statsPicks;
+  const visibleStatsPicks = statsPicks.filter((p) => {
+    if (scanFilter === "clean") return p.focus_status === "clean";
+    if (scanFilter === "live_premium") return p.live_iv === true;
+    return true;
+  });
+  const livePremiumCount = statsPicks.filter((p) => p.live_iv === true).length;
 
   return (
     <div className="page-stack">
@@ -293,7 +299,9 @@ export default function OptionsPage() {
                 ? "Expiry-week survivability, outlier detection, and event context for indices & F&O stocks."
                 : subTab === "market-news"
                   ? "India & global market news rated by importance for option sellers."
-                  : "Probability-based decision support for option selling"}
+                  : subTab === "index-outlook"
+                    ? "Daily bullish / bearish / sideways forecast for Indian indices with option strategy."
+                    : "Probability-based decision support for option selling"}
           </p>
         </div>
         {subTab === "analysis" && <OptionsInterpretationGuideButton className="shrink-0" />}
@@ -302,7 +310,8 @@ export default function OptionsPage() {
       <div className="pill-group" role="tablist" aria-label="Options view">
         {(
           [
-            { value: "analysis", label: "Analysis" },
+            { value: "index-outlook", label: "Index Outlook" },
+            { value: "analysis", label: "Stock Scan" },
             { value: "seller", label: "Selling Assistant" },
             { value: "expiry-outliers", label: "Expiry Outliers" },
             { value: "market-news", label: "Market News" },
@@ -331,6 +340,17 @@ export default function OptionsPage() {
       {subTab === "expiry-outliers" && <ExpiryOutliersPanel />}
 
       {subTab === "market-news" && <MarketNewsPanel />}
+
+      {subTab === "index-outlook" && (
+        <IndexForecastPanel
+          onAnalyzeIndex={(sym) => {
+            setSubTab("analysis");
+            cache.set(SUBTAB_CACHE_KEY, "analysis");
+            setSymbol(sym);
+            analyze(sym, "neutral");
+          }}
+        />
+      )}
 
       {subTab === "analysis" && (
       <>
@@ -447,26 +467,34 @@ export default function OptionsPage() {
               Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Scans top 150 liquid F&amp;O names for IV edge, regime, and best strategy.{" "}
-              <strong>Focus</strong> flags news/odd activity (gaps, vol spikes, large moves). Pick{" "}
-              <strong>Clean</strong> names with the highest Option Score.
+              Scans top 150 liquid F&amp;O names for IV edge, regime, and best strategy for the{" "}
+              <strong>{optionType === "put" ? "Put" : "Call"}</strong> tab (switch Call/Put above, then Rescan).{" "}
+              <strong>Focus</strong> flags news/odd activity. Pick <strong>Clean</strong> names with the highest Option Score.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="pill-group" role="group">
+            <div className="pill-group" role="group" aria-label="Scan filter">
               <button
                 type="button"
-                className={`pill ${!cleanOnly ? "pill-active" : ""}`}
-                onClick={() => setCleanOnly(false)}
+                className={`pill ${scanFilter === "all" ? "pill-active" : ""}`}
+                onClick={() => setScanFilter("all")}
               >
                 All
               </button>
               <button
                 type="button"
-                className={`pill ${cleanOnly ? "pill-active" : ""}`}
-                onClick={() => setCleanOnly(true)}
+                className={`pill ${scanFilter === "clean" ? "pill-active" : ""}`}
+                onClick={() => setScanFilter("clean")}
               >
-                Clean only
+                Clean
+              </button>
+              <button
+                type="button"
+                className={`pill ${scanFilter === "live_premium" ? "pill-active" : ""}`}
+                onClick={() => setScanFilter("live_premium")}
+                title="Stocks where live NSE option premium/IV was fetched successfully"
+              >
+                Live premium{statsPicksLoaded ? ` (${livePremiumCount})` : ""}
               </button>
             </div>
             <button
@@ -486,7 +514,11 @@ export default function OptionsPage() {
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
         ) : visibleStatsPicks.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
-            No clean names right now — switch to <strong>All</strong> or try the other side (Call/Put).
+            {scanFilter === "live_premium"
+              ? "No stocks with live NSE premium in this scan — try Rescan or switch to All."
+              : scanFilter === "clean"
+                ? "No clean names right now — switch to All or Live premium."
+                : "No results — click Rescan."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -514,7 +546,18 @@ export default function OptionsPage() {
                   <tr
                     key={p.symbol}
                     className="cursor-pointer"
-                    onClick={() => analyze(p.symbol, "selling")}
+                    onClick={() => {
+                      const s = p.recommended_strategy;
+                      let mode = "selling";
+                      const type: "call" | "put" =
+                        p.strategy_side === "call"
+                          ? "call"
+                          : p.strategy_side === "put"
+                            ? "put"
+                            : (optionType as "call" | "put");
+                      if (s.includes("Condor") || s.includes("Strangle")) mode = "neutral";
+                      analyze(p.symbol, mode, type);
+                    }}
                     style={{
                       opacity: p.focus_status === "avoid" ? 0.72 : 1,
                     }}
@@ -553,18 +596,35 @@ export default function OptionsPage() {
                     </td>
                     <td className="text-xs">{p.trend_label}</td>
                     <td className="text-xs" title={p.strategy_note}>
-                      <span
-                        style={{
-                          color:
-                            p.recommended_strategy === "Wait"
-                              ? "var(--fg-muted)"
-                              : p.recommended_strategy.includes("Spread") || p.recommended_strategy === "Iron Condor"
-                                ? "var(--accent)"
-                                : "var(--green)",
-                        }}
-                      >
-                        {p.recommended_strategy || "—"}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span
+                          style={{
+                            color:
+                              p.recommended_strategy === "Wait"
+                                ? "var(--fg-muted)"
+                                : p.recommended_strategy.includes("Spread") || p.recommended_strategy === "Iron Condor"
+                                  ? "var(--accent)"
+                                  : "var(--green)",
+                          }}
+                        >
+                          {p.recommended_strategy || "—"}
+                        </span>
+                        {p.strategy_side && p.strategy_side !== "na" && (
+                          <span
+                            className="font-mono text-[0.625rem] uppercase tracking-wide"
+                            style={{
+                              color:
+                                p.strategy_side === "both"
+                                  ? "var(--fg-muted)"
+                                  : p.strategy_side === "put"
+                                    ? "var(--amber)"
+                                    : "var(--accent)",
+                            }}
+                          >
+                            {p.strategy_side === "both" ? "CE + PE" : p.strategy_side === "put" ? "Put side" : "Call side"}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="table-cell-note">{p.reason || "—"}</td>
                   </tr>
@@ -574,8 +634,8 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-          Scans 150 liquid F&amp;O stocks (Nifty 100 + midcap). <strong>Strategy</strong> column suggests the best structure (strangle, iron condor, spreads, wait) from regime, stretch, and IV. Quant * = HV proxy when NSE chain unavailable.
-          Click a row for full analysis. Prefer <strong>Clean</strong> focus — use <strong>Iron Condor / spreads</strong> when stretched or caution.
+          Scans 150 liquid F&amp;O stocks. <strong>Live premium</strong> = NSE chain fetched with real IV/premium (no * on Quant). <strong>Strategy</strong> follows Call/Put pill. Prefer <strong>Live premium</strong> or <strong>Clean</strong> for actual trades.
+          Click a row for full analysis. Use <strong>Iron Condor / spreads</strong> when stretched or caution.
         </p>
       </div>
 

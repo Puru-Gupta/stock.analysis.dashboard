@@ -37,7 +37,11 @@ const INDEX_QUOTE_MAP: Record<string, string> = {
   "^NSEBANK": "NIFTY BANK",
   NSEBANK: "NIFTY BANK",
   FINNIFTY: "NIFTY FINANCIAL SERVICES",
+  "^CNXFIN": "NIFTY FINANCIAL SERVICES",
+  CNXFIN: "NIFTY FINANCIAL SERVICES",
   MIDCPNIFTY: "NIFTY MIDCAP SELECT",
+  "^NSMIDCP": "NIFTY MIDCAP SELECT",
+  NSMIDCP: "NIFTY MIDCAP SELECT",
 };
 
 export async function nseQuoteAgent(symbol: string): Promise<AgentQuote> {
@@ -160,8 +164,13 @@ const INDEX_ALIASES: Record<string, string> = {
   NSEI: "NIFTY",
   BANKNIFTY: "BANKNIFTY",
   "^NSEBANK": "BANKNIFTY",
+  NSEBANK: "BANKNIFTY",
   FINNIFTY: "FINNIFTY",
+  "^CNXFIN": "FINNIFTY",
+  CNXFIN: "FINNIFTY",
   MIDCPNIFTY: "MIDCPNIFTY",
+  "^NSMIDCP": "MIDCPNIFTY",
+  NSMIDCP: "MIDCPNIFTY",
 };
 
 export async function nseOptionChainAgent(symbol: string): Promise<AgentOptionChain> {

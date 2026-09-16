@@ -350,6 +350,50 @@ export interface OptionStatsPick {
   empirical_pop?: number | null;
   recommended_strategy: string;
   strategy_note: string;
+  strategy_side: "put" | "call" | "both" | "na";
+}
+
+export interface IndexForecastRow {
+  id: string;
+  label: string;
+  symbol: string;
+  spot: number;
+  change_pct: number | null;
+  daily_forecast: "bullish" | "bearish" | "sideways";
+  weekly_forecast: "bullish" | "bearish" | "sideways";
+  confidence: number;
+  composite_score: number;
+  technical_score: number;
+  technical_trend: string;
+  rsi: number;
+  sentiment_score: number;
+  sentiment_bias: string;
+  sentiment_label: string;
+  regime_label: string;
+  regime_state: string;
+  vix_label: string;
+  india_vix: number | null;
+  pcr_oi: number | null;
+  skew_25d: number | null;
+  max_pain: number | null;
+  iv_rank_proxy: number;
+  recommended_strategy: string;
+  strategy_note: string;
+  strategy_side: "put" | "call" | "both" | "na";
+  option_play: string;
+  drivers: string[];
+  risks: string[];
+  sentiment_headlines: { title: string; bias: string; channel: string }[];
+}
+
+export interface IndexForecastBundle {
+  indices: IndexForecastRow[];
+  market_summary: {
+    daily_bias: "bullish" | "bearish" | "sideways";
+    label: string;
+    detail: string;
+  };
+  analyzed_at: string;
 }
 
 export interface OptionRec {
