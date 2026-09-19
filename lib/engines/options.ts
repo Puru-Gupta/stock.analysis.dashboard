@@ -2,7 +2,7 @@ import { fetchLiveMarketBundle, fetchLiveOptionChain } from "@/lib/data/agents/o
 import type { AgentOptionLeg } from "@/lib/data/agents/types";
 import type { OHLCVBar } from "@/lib/data/types";
 import { getPriceHistory } from "@/lib/data/sync";
-import { FNO_LIQUID_150, NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
+import { NIFTY_50, normalizeSymbol } from "@/lib/data/universes";
 import { pickBestOptionStrategy } from "./option-strategy-pick";
 import { buildOptionsAdvantages, getModeDetails } from "./intel";
 import { detectTrend } from "./technical";
@@ -962,8 +962,8 @@ function regimeScoreBonus(regime: string) {
 }
 
 /** Rank liquid F&O names by statistical option-selling score (vol, regime, confidence, stretch, quant signals). */
-export async function scanOptionStatsUniverse(optionType = "call", limit = 150): Promise<OptionStatsPick[]> {
-  const liquid = FNO_LIQUID_150;
+export async function scanOptionStatsUniverse(optionType = "call", limit = 50): Promise<OptionStatsPick[]> {
+  const liquid = NIFTY_50;
   const vixRegime = await getIndiaVixRegime();
 
   const results = await mapPool(liquid, 4, async (sym) => {

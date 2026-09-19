@@ -229,7 +229,7 @@ export default function OptionsPage() {
     setStatsPicksLoading(true);
     try {
       const data = await fetchAPI<OptionStatsPick[]>(
-        `/api/options/stats/scan?option_type=${optionType}&limit=150`,
+        `/api/options/stats/scan?option_type=${optionType}&limit=50`,
       );
       setStatsPicks(data);
       setStatsPicksLoaded(true);
@@ -467,7 +467,7 @@ export default function OptionsPage() {
               Best Stocks for Option Selling — ranked by score
             </h3>
             <p className="text-xs" style={{ color: "var(--fg-tertiary)" }}>
-              Scans top 150 liquid F&amp;O names for IV edge, regime, and best strategy for the{" "}
+              Scans Nifty 50 (most liquid F&amp;O names) for IV edge, regime, and best strategy for the{" "}
               <strong>{optionType === "put" ? "Put" : "Call"}</strong> tab (switch Call/Put above, then Rescan).{" "}
               <strong>Focus</strong> flags news/odd activity. Pick <strong>Clean</strong> names with the highest Option Score.
             </p>
@@ -509,7 +509,7 @@ export default function OptionsPage() {
           </div>
         </div>
         {statsPicksLoading && !statsPicksLoaded ? (
-          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning 150 liquid F&amp;O names… (may take 2–3 min)</p>
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>Scanning Nifty 50… (about 1 min)</p>
         ) : statsPicks.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>No results — click Rescan.</p>
         ) : visibleStatsPicks.length === 0 ? (
@@ -634,7 +634,7 @@ export default function OptionsPage() {
           </div>
         )}
         <p className="mt-2 text-[0.625rem]" style={{ color: "var(--fg-muted)" }}>
-          Scans 150 liquid F&amp;O stocks. <strong>Live premium</strong> = NSE chain fetched with real IV/premium (no * on Quant). <strong>Strategy</strong> follows Call/Put pill. Prefer <strong>Live premium</strong> or <strong>Clean</strong> for actual trades.
+          Scans Nifty 50 only for sharper rankings. <strong>Live premium</strong> = NSE chain fetched with real IV/premium (no * on Quant). <strong>Strategy</strong> follows Call/Put pill. Prefer <strong>Live premium</strong> or <strong>Clean</strong> for actual trades.
           Click a row for full analysis. Use <strong>Iron Condor / spreads</strong> when stretched or caution.
         </p>
       </div>
