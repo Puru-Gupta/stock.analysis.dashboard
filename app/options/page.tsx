@@ -16,6 +16,7 @@ import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import ExpiryOutliersPanel from "@/components/ExpiryOutliersPanel";
 import MarketNewsPanel from "@/components/MarketNewsPanel";
 import IndexForecastPanel from "@/components/IndexForecastPanel";
+import PriceForecastPanel from "@/components/PriceForecastPanel";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -301,7 +302,9 @@ export default function OptionsPage() {
                   ? "India & global market news rated by importance for option sellers."
                   : subTab === "index-outlook"
                     ? "Daily bullish / bearish / sideways forecast for Indian indices with option strategy."
-                    : "Probability-based decision support for option selling"}
+                    : subTab === "price-forecast"
+                      ? "Ensemble price forecast with 70/30 holdout — rank Nifty 50 by model alignment."
+                      : "Probability-based decision support for option selling"}
           </p>
         </div>
         {subTab === "analysis" && <OptionsInterpretationGuideButton className="shrink-0" />}
@@ -311,6 +314,7 @@ export default function OptionsPage() {
         {(
           [
             { value: "index-outlook", label: "Index Outlook" },
+            { value: "price-forecast", label: "Price Forecast" },
             { value: "analysis", label: "Stock Scan" },
             { value: "seller", label: "Selling Assistant" },
             { value: "expiry-outliers", label: "Expiry Outliers" },
@@ -348,6 +352,17 @@ export default function OptionsPage() {
             cache.set(SUBTAB_CACHE_KEY, "analysis");
             setSymbol(sym);
             analyze(sym, "neutral");
+          }}
+        />
+      )}
+
+      {subTab === "price-forecast" && (
+        <PriceForecastPanel
+          onPickSymbol={(sym) => {
+            setSubTab("analysis");
+            cache.set(SUBTAB_CACHE_KEY, "analysis");
+            setSymbol(sym);
+            analyze(sym, "directional");
           }}
         />
       )}

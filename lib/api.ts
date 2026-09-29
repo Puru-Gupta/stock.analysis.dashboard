@@ -386,6 +386,38 @@ export interface IndexForecastRow {
   sentiment_headlines: { title: string; bias: string; channel: string }[];
 }
 
+export interface PriceForecastResult {
+  symbol: string;
+  name: string;
+  spot: number;
+  train_bars: number;
+  test_bars: number;
+  alignment_score: number;
+  holdout_mape_pct: number;
+  direction_accuracy_pct: number;
+  models: {
+    id: string;
+    name: string;
+    holdout_mape_pct: number;
+    direction_accuracy_pct: number;
+    blend_weight_pct: number;
+  }[];
+  horizons: {
+    days: number;
+    label: string;
+    predicted_close: number;
+    change_pct: number;
+    direction: "up" | "down" | "stagnation";
+    band_low: number;
+    band_high: number;
+  }[];
+  history: { date: string; close: number }[];
+  forecast_path: { date: string; close: number; band_low: number; band_high: number }[];
+  method_note: string;
+  models_used: string[];
+  ensemble_method: string;
+}
+
 export interface IndexForecastBundle {
   indices: IndexForecastRow[];
   market_summary: {
