@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchAPI, type PriceForecastResult } from "@/lib/api";
 import { LoadingSpinner, ErrorMessage } from "@/components/Sidebar";
+import { useAppCache } from "@/components/AppCacheProvider";
 import ForecastChart from "@/components/ForecastChart";
 import { RefreshCw, TrendingDown, TrendingUp, Minus } from "lucide-react";
+
+const CACHE_KEY = "options_price_forecast";
 
 type ForecastDirection = "up" | "down" | "stagnation";
 
@@ -24,6 +27,12 @@ type ScanRow = {
   direction_weekly: ForecastDirection;
   direction_monthly: ForecastDirection;
   primary_direction: ForecastDirection;
+};
+
+type PriceForecastCache = {
+  scan: ScanRow[];
+  detail: PriceForecastResult | null;
+  selected: string | null;
 };
 
 function directionLabel(d: ForecastDirection) {
@@ -55,27 +64,49 @@ export default function PriceForecastPanel({
 }: {
   onPickSymbol?: (symbol: string) => void;
 }) {
+  const cache = useAppCache();
   const [scan, setScan] = useState<ScanRow[]>([]);
   const [detail, setDetail] = useState<PriceForecastResult | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
+  const [cacheRestored, setCacheRestored] = useState(false);
+
+  const persist = useCallback(
+    (patch: Partial<PriceForecastCache>) => {
+      const prev = cache.get<PriceForecastCache>(CACHE_KEY) ?? { scan: [], detail: null, selected: null };
+      cache.set(CACHE_KEY, { ...prev, ...patch });
+    },
+    [cache],
+  );
+
+  useEffect(() => {
+    if (!cache.ready || cacheRestored) return;
+    const saved = cache.get<PriceForecastCache>(CACHE_KEY);
+    if (saved) {
+      if (saved.scan?.length) setScan(saved.scan);
+      if (saved.detail) setDetail(saved.detail);
+      if (saved.selected) setSelected(saved.selected);
+    }
+    setCacheRestored(true);
+  }, [cache, cacheRestored]);
 
   const runScan = useCallback(async () => {
     setLoading(true);
     setError("");
-    setScan([]);
-    setDetail(null);
     try {
       const res = await fetchAPI<{ scan: boolean; picks: ScanRow[] }>("/api/options/price-forecast?scan=1&limit=50");
       setScan(res.picks);
+      setDetail(null);
+      setSelected(null);
+      persist({ scan: res.picks, detail: null, selected: null });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [persist]);
 
   const loadDetail = useCallback(async (symbol: string) => {
     setSelected(symbol);
@@ -86,13 +117,14 @@ export default function PriceForecastPanel({
         `/api/options/price-forecast?symbol=${encodeURIComponent(symbol)}`,
       );
       setDetail(f);
+      persist({ detail: f, selected: symbol });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Detail failed");
       setDetail(null);
     } finally {
       setLoadingDetail(false);
     }
-  }, []);
+  }, [persist]);
 
   return (
     <div className="page-stack">

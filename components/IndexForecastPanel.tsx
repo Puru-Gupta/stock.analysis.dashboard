@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchAPI, type IndexForecastBundle, type IndexForecastRow } from "@/lib/api";
 import { LoadingSpinner, ErrorMessage } from "@/components/Sidebar";
+import { useAppCache } from "@/components/AppCacheProvider";
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from "lucide-react";
+
+const CACHE_KEY = "options_index_forecast";
 
 function BiasBadge({ bias }: { bias: string }) {
   const cls =
@@ -151,9 +154,18 @@ export default function IndexForecastPanel({
 }: {
   onAnalyzeIndex?: (symbol: string) => void;
 }) {
+  const cache = useAppCache();
   const [data, setData] = useState<IndexForecastBundle | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [cacheRestored, setCacheRestored] = useState(false);
+
+  useEffect(() => {
+    if (!cache.ready || cacheRestored) return;
+    const saved = cache.get<IndexForecastBundle>(CACHE_KEY);
+    if (saved) setData(saved);
+    setCacheRestored(true);
+  }, [cache, cacheRestored]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,13 +173,14 @@ export default function IndexForecastPanel({
     try {
       const res = await fetchAPI<IndexForecastBundle>("/api/options/index-forecast");
       setData(res);
+      cache.set(CACHE_KEY, res);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load index forecast");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cache]);
 
   return (
     <div className="page-stack">

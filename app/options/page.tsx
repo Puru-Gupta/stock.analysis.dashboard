@@ -26,6 +26,21 @@ import { useAppCache } from "@/components/AppCacheProvider";
 const CACHE_KEY = "options";
 const SUBTAB_CACHE_KEY = "options_subtab";
 
+/** Keep tab content mounted so scan/refresh output survives tab switches. */
+function OptionsTabPanel({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div role="tabpanel" hidden={!active} aria-hidden={!active} className={active ? undefined : "hidden"}>
+      {children}
+    </div>
+  );
+}
+
 type OptionsCache = {
   symbol: string;
   optionType: string;
@@ -339,13 +354,19 @@ export default function OptionsPage() {
 
       <Disclaimer />
 
-      {subTab === "seller" && <SellerAssistant />}
+      <OptionsTabPanel active={subTab === "seller"}>
+        <SellerAssistant />
+      </OptionsTabPanel>
 
-      {subTab === "expiry-outliers" && <ExpiryOutliersPanel />}
+      <OptionsTabPanel active={subTab === "expiry-outliers"}>
+        <ExpiryOutliersPanel />
+      </OptionsTabPanel>
 
-      {subTab === "market-news" && <MarketNewsPanel />}
+      <OptionsTabPanel active={subTab === "market-news"}>
+        <MarketNewsPanel />
+      </OptionsTabPanel>
 
-      {subTab === "index-outlook" && (
+      <OptionsTabPanel active={subTab === "index-outlook"}>
         <IndexForecastPanel
           onAnalyzeIndex={(sym) => {
             setSubTab("analysis");
@@ -354,9 +375,9 @@ export default function OptionsPage() {
             analyze(sym, "neutral");
           }}
         />
-      )}
+      </OptionsTabPanel>
 
-      {subTab === "price-forecast" && (
+      <OptionsTabPanel active={subTab === "price-forecast"}>
         <PriceForecastPanel
           onPickSymbol={(sym) => {
             setSubTab("analysis");
@@ -365,9 +386,9 @@ export default function OptionsPage() {
             analyze(sym, "directional");
           }}
         />
-      )}
+      </OptionsTabPanel>
 
-      {subTab === "analysis" && (
+      <OptionsTabPanel active={subTab === "analysis"}>
       <>
       <div className="product-panel">
         <div className="product-section">
@@ -743,7 +764,7 @@ export default function OptionsPage() {
         </div>
       )}
       </>
-      )}
+      </OptionsTabPanel>
     </div>
   );
 }
