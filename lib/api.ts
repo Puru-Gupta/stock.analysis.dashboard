@@ -659,6 +659,48 @@ export interface ExpiryWeekRow {
   status: "within" | "upside_outlier" | "downside_outlier";
 }
 
+export interface ExpiryCadenceSummary {
+  total_expiries: number;
+  strangle_survival_rate_pct: number;
+  outlier_rate_pct: number;
+  downside_outliers: number;
+  upside_outliers: number;
+  avg_mae_pct: number;
+  avg_mfe_pct: number;
+}
+
+export interface ExpiryRobustPick {
+  symbol: string;
+  name: string;
+  spot: number;
+  robust_score: number;
+  grade: "A" | "B" | "C" | "D";
+  monthly: ExpiryCadenceSummary;
+  weekly: ExpiryCadenceSummary;
+  option_score: number;
+  quant_score: number | null;
+  seller_vol_score: number;
+  confidence: number;
+  z_score_1m: number;
+  trend_label: string;
+  regime: string;
+  focus_status: "clean" | "caution" | "avoid";
+  focus_label: string;
+  live_iv: boolean;
+  recommended_strategy: string;
+  strategy_note: string;
+  score_breakdown: string[];
+}
+
+export interface ExpiryRobustScanResult {
+  picks: ExpiryRobustPick[];
+  start_date: string;
+  end_date: string;
+  coverage_pct: number;
+  methodology: string;
+  scanned_at: string;
+}
+
 export interface ExpiryOutliersResult {
   symbol: string;
   label: string;

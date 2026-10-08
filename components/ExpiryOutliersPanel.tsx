@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchAPI, ExpiryOutliersResult, ExpiryNewsItem, ExpiryWeekRow } from "@/lib/api";
+import {
+  fetchAPI,
+  ExpiryOutliersResult,
+  ExpiryNewsItem,
+  ExpiryRobustPick,
+  ExpiryRobustScanResult,
+  ExpiryWeekRow,
+} from "@/lib/api";
 import { FNO_INDICES, stockOptions } from "@/lib/data/expiry-outliers-universe";
 import { eventCategoryColor } from "@/lib/data/market-events";
 import { ErrorMessage, LoadingSpinner } from "@/components/Sidebar";
@@ -168,6 +175,17 @@ function OutlierScatter({
   );
 }
 
+function RobustGradeBadge({ grade }: { grade: ExpiryRobustPick["grade"] }) {
+  const cls =
+    grade === "A" ? "badge-buy" : grade === "B" ? "badge-watch" : grade === "C" ? "badge-watch" : "badge-sell";
+  return <span className={`${cls} font-mono`}>{grade}</span>;
+}
+
+function FocusMini({ status }: { status: ExpiryRobustPick["focus_status"] }) {
+  const cls = status === "clean" ? "badge-buy" : status === "caution" ? "badge-watch" : "badge-sell";
+  return <span className={cls}>{status}</span>;
+}
+
 function WeekDetail({ row }: { row: ExpiryWeekRow | undefined }) {
   if (!row) return null;
   return (
@@ -246,6 +264,9 @@ export default function ExpiryOutliersPanel() {
   const [loading, setLoading] = useState(false);
   const [newsLoading, setNewsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [robust, setRobust] = useState<ExpiryRobustScanResult | null>(null);
+  const [robustLoading, setRobustLoading] = useState(false);
+  const [robustError, setRobustError] = useState("");
 
   const indexMeta = FNO_INDICES.find((x) => x.id === indexId) || FNO_INDICES[0];
   const activeSymbol = universe === "index" ? indexMeta.symbol : stockSym;
@@ -261,31 +282,65 @@ export default function ExpiryOutliersPanel() {
     [data, selectedWeek],
   );
 
-  const loadAnalysis = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadRobustScan = useCallback(async () => {
+    setRobustLoading(true);
+    setRobustError("");
     try {
       const q = new URLSearchParams({
-        symbol: activeSymbol,
-        label: activeLabel,
-        universe,
-        cadence,
-        return_mode: returnMode,
         start_date: startDate,
         end_date: endDate,
         coverage_pct: String(coverage),
+        limit: "50",
       });
-      const result = await fetchAPI<ExpiryOutliersResult>(`/api/options/expiry-outliers?${q}`);
-      setData(result);
-      const firstOutlier = result.rows.find((r) => r.status !== "within");
-      setSelectedWeek(firstOutlier?.end_date || result.rows[0]?.end_date || "");
+      const result = await fetchAPI<ExpiryRobustScanResult>(
+        `/api/options/expiry-outliers/robust-scan?${q}`,
+      );
+      setRobust(result);
     } catch (e) {
-      setData(null);
-      setError(e instanceof Error ? e.message : "Analysis failed");
+      setRobust(null);
+      setRobustError(e instanceof Error ? e.message : "Robust scan failed");
     } finally {
-      setLoading(false);
+      setRobustLoading(false);
     }
-  }, [activeSymbol, activeLabel, universe, cadence, returnMode, startDate, endDate, coverage]);
+  }, [startDate, endDate, coverage]);
+
+  const loadAnalysis = useCallback(
+    async (overrides?: { symbol: string; label: string; cadence?: "weekly" | "monthly" }) => {
+      if (overrides) {
+        setUniverse("stock");
+        setStockSym(overrides.symbol);
+        if (overrides.cadence) setCadence(overrides.cadence);
+      }
+      const sym = overrides?.symbol ?? activeSymbol;
+      const lbl = overrides?.label ?? activeLabel;
+      const uni = overrides ? "stock" : universe;
+      const cad = overrides?.cadence ?? cadence;
+      setLoading(true);
+      setError("");
+      try {
+        const q = new URLSearchParams({
+          symbol: sym,
+          label: lbl,
+          universe: uni,
+          cadence: cad,
+          return_mode: returnMode,
+          start_date: startDate,
+          end_date: endDate,
+          coverage_pct: String(coverage),
+        });
+        const result = await fetchAPI<ExpiryOutliersResult>(`/api/options/expiry-outliers?${q}`);
+        setData(result);
+        const firstOutlier = result.rows.find((r) => r.status !== "within");
+        setSelectedWeek(firstOutlier?.end_date || result.rows[0]?.end_date || "");
+      } catch (e) {
+        setData(null);
+        setError(e instanceof Error ? e.message : "Analysis failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeSymbol, activeLabel, universe, cadence, returnMode, startDate, endDate, coverage],
+  );
 
   const loadNews = useCallback(async () => {
     if (!selectedWeek) return;
@@ -447,11 +502,112 @@ export default function ExpiryOutliersPanel() {
               {data ? `${data.lower_percentile}th / ${data.upper_percentile}th` : "—"} percentile bands
             </p>
           </div>
-          <button type="button" onClick={loadAnalysis} className="btn-secondary flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => void loadAnalysis()}
+            className="btn-secondary flex items-center gap-2 text-xs"
+          >
             <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Run analysis
           </button>
         </div>
+      </div>
+
+      <div className="card" style={{ borderColor: "rgba(31,138,101,0.25)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="card-section-title !normal-case !tracking-normal !text-sm !text-[var(--fg-primary)]">
+              Robust statistical rank — Nifty 50
+            </h3>
+            <p className="text-xs mt-1" style={{ color: "var(--fg-tertiary)" }}>
+              Combines <strong>monthly + weekly expiry outliers</strong> (±1σ survival, outlier rate, MAE/MFE) with{" "}
+              <strong>Stock Scan</strong> (option score, quant, IV regime, Z-score, focus, strategy). Uses the analysis
+              period &amp; coverage sliders above. Click a row to open that stock&apos;s expiry chart below.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadRobustScan()}
+            disabled={robustLoading}
+            className="btn-secondary flex items-center gap-2 text-xs shrink-0"
+          >
+            <RefreshCw className={`h-3 w-3 ${robustLoading ? "animate-spin" : ""}`} />
+            Run robust scan
+          </button>
+        </div>
+        {robustLoading && (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+            Scanning Nifty 50… (~2–4 min)
+          </p>
+        )}
+        {robustError && <ErrorMessage message={robustError} />}
+        {!robustLoading && !robust && !robustError && (
+          <p className="text-sm" style={{ color: "var(--fg-secondary)" }}>
+            Click <strong>Run robust scan</strong> for the ranked list.
+          </p>
+        )}
+        {robust && robust.picks.length > 0 && (
+          <>
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <table className="data-table text-xs">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Grade</th>
+                    <th>Stock</th>
+                    <th>Robust</th>
+                    <th>Mo ±1σ</th>
+                    <th>Wk ±1σ</th>
+                    <th>Mo out%</th>
+                    <th>Opt</th>
+                    <th>Quant</th>
+                    <th>Z</th>
+                    <th>Focus</th>
+                    <th>Strategy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {robust.picks.map((p, i) => (
+                    <tr
+                      key={p.symbol}
+                      className="cursor-pointer"
+                      title={p.score_breakdown.join(" · ")}
+                      onClick={() =>
+                        void loadAnalysis({
+                          symbol: p.symbol,
+                          label: p.name,
+                          cadence: "monthly",
+                        })
+                      }
+                      style={{
+                        opacity: p.focus_status === "avoid" ? 0.65 : 1,
+                        background: stockSym === p.symbol && universe === "stock" ? "var(--bg-secondary)" : undefined,
+                      }}
+                    >
+                      <td className="font-mono">{i + 1}</td>
+                      <td><RobustGradeBadge grade={p.grade} /></td>
+                      <td className="font-medium">{p.name}</td>
+                      <td className="font-mono text-base" style={{ color: p.robust_score >= 58 ? "var(--green)" : undefined }}>
+                        {p.robust_score}
+                      </td>
+                      <td className="font-mono">{p.monthly.strangle_survival_rate_pct}%</td>
+                      <td className="font-mono">{p.weekly.strangle_survival_rate_pct}%</td>
+                      <td className="font-mono">{p.monthly.outlier_rate_pct}%</td>
+                      <td className="font-mono">{p.option_score}</td>
+                      <td className="font-mono">{p.quant_score ?? "—"}</td>
+                      <td className="font-mono">{p.z_score_1m > 0 ? "+" : ""}{p.z_score_1m}</td>
+                      <td><FocusMini status={p.focus_status} /></td>
+                      <td className="max-w-[100px] truncate" title={p.strategy_note}>{p.recommended_strategy}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[0.625rem] mt-2" style={{ color: "var(--fg-muted)" }}>
+              {robust.methodology} Scanned {new Date(robust.scanned_at).toLocaleString("en-IN")}.
+            </p>
+          </>
+        )}
       </div>
 
       {loading && <LoadingSpinner />}
