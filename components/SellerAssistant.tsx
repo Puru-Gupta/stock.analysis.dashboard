@@ -6,6 +6,7 @@ import { compareNearestExpiries } from "@/lib/engines/premium-decay";
 import { daysToExpiryFromNseDate } from "@/lib/engines/greeks";
 import PremiumDecayTimelinePanel from "@/components/PremiumDecayTimeline";
 import { LoadingSpinner, ErrorMessage } from "@/components/Sidebar";
+import ForumSentimentPanel from "@/components/ForumSentimentPanel";
 import { Search, Sparkles, X, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useAppCache } from "@/components/AppCacheProvider";
 
@@ -673,6 +674,7 @@ export default function SellerAssistant() {
 
       {board && !loading && (
         <>
+          <ForumSentimentPanel symbol={board.symbol} />
           {/* Minimal context strip */}
           <div className="card">
             <div className="flex flex-wrap items-center justify-between gap-3">

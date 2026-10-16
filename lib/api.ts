@@ -727,6 +727,28 @@ export interface ExpiryOutliersResult {
   note?: string;
 }
 
+export interface ForumSentiment {
+  source: string;
+  company: string;
+  sc_id: string;
+  forum_url: string;
+  crowd: { buy_pct: number; sell_pct: number; hold_pct: number };
+  language_score: number;
+  language_bias: "bullish" | "bearish" | "mixed" | "neutral";
+  overall: "bullish" | "bearish" | "mixed" | "neutral";
+  overall_label: string;
+  summary: string;
+  post_count: number;
+  follower_count: number | null;
+  sample_posts: {
+    text: string;
+    user: string;
+    posted_at: string;
+    bias: "bullish" | "bearish" | "neutral";
+  }[];
+  note: string;
+}
+
 export interface ExpiryNewsItem {
   title: string;
   link: string;

@@ -22,6 +22,7 @@ import {
 } from "@/components/Sidebar";
 import EquityFilterPanel from "@/components/EquityFilterPanel";
 import DataIntelPanel from "@/components/DataIntelPanel";
+import ForumSentimentPanel from "@/components/ForumSentimentPanel";
 import MarketRegimeBanner from "@/components/MarketRegimeBanner";
 import ScanPresets, { type ScanPreset } from "@/components/ScanPresets";
 import PositionSizer from "@/components/PositionSizer";
@@ -370,6 +371,7 @@ function EquityPageContent() {
                 agentQuotes={analysis.agent_quotes}
                 agentsMs={analysis.agents_ms}
               />
+              <ForumSentimentPanel symbol={analysis.symbol} />
               <div className="card">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>

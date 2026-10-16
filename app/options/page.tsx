@@ -17,6 +17,7 @@ import ExpiryOutliersPanel from "@/components/ExpiryOutliersPanel";
 import MarketNewsPanel from "@/components/MarketNewsPanel";
 import IndexForecastPanel from "@/components/IndexForecastPanel";
 import PriceForecastPanel from "@/components/PriceForecastPanel";
+import ForumSentimentPanel from "@/components/ForumSentimentPanel";
 import {
   OptionsInterpretationGuideButton,
   OptionsInterpretationSummary,
@@ -687,6 +688,7 @@ export default function OptionsPage() {
             agentQuotes={analysis.agent_quotes}
             agentsMs={analysis.agents_ms}
           />
+          <ForumSentimentPanel symbol={analysis.symbol} />
 
           {analysis.stats && (
             <>
