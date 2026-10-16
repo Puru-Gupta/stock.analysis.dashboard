@@ -5,7 +5,7 @@ import { fetchAPI, type ForumSentiment } from "@/lib/api";
 import { useAppCache } from "@/components/AppCacheProvider";
 import { ExternalLink, RefreshCw, MessagesSquare } from "lucide-react";
 
-const CACHE_PREFIX = "forum_sentiment_";
+const CACHE_PREFIX = "forum_sentiment_v2_";
 
 function BiasBadge({ bias }: { bias: string }) {
   const cls =
@@ -35,9 +35,9 @@ function CrowdBar({
         <div style={{ width: `${s}%`, background: "var(--red)" }} />
       </div>
       <div className="mt-1.5 flex flex-wrap gap-3 font-mono text-[0.625rem] tabular-nums" style={{ color: "var(--fg-muted)" }}>
-        <span style={{ color: "var(--green)" }}>Buy {buy}%</span>
-        <span style={{ color: "var(--amber)" }}>Hold {hold}%</span>
-        <span style={{ color: "var(--red)" }}>Sell {sell}%</span>
+        <span style={{ color: "var(--green)" }}>Bullish {buy}%</span>
+        <span style={{ color: "var(--amber)" }}>Unclear {hold}%</span>
+        <span style={{ color: "var(--red)" }}>Bearish {sell}%</span>
       </div>
     </div>
   );
@@ -129,12 +129,14 @@ export default function ForumSentimentPanel({ symbol }: { symbol: string }) {
             {data.overall_label}
           </p>
           <div className="mt-3">
-            <p className="field-label !mb-1">Crowd sentimeter</p>
+            <p className="field-label !mb-1">
+              Recent posts ({data.scored_n} scored) — not Moneycontrol&apos;s sentimeter
+            </p>
             <CrowdBar buy={data.crowd.buy_pct} sell={data.crowd.sell_pct} hold={data.crowd.hold_pct} />
           </div>
           <div className="mt-3 grid gap-2 text-xs font-mono sm:grid-cols-3" style={{ color: "var(--fg-muted)" }}>
-            <div>Post language {data.language_score}/100 · {data.language_bias}</div>
-            <div>{data.post_count.toLocaleString("en-IN")} posts</div>
+            <div>Lean {data.language_score}/100 · {data.overall}</div>
+            <div>{data.post_count.toLocaleString("en-IN")} lifetime posts</div>
             <div>{data.follower_count != null ? `${data.follower_count.toLocaleString("en-IN")} followers` : "—"}</div>
           </div>
           {data.summary && (

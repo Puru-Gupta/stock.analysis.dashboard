@@ -113,19 +113,6 @@ export async function fetchForumMessages(topicId: string, limit = 30) {
   };
 }
 
-export async function fetchForumCrowd(scId: string) {
-  const json = await getJson<{
-    success: number;
-    data?: { sentimeter?: { buy_perc?: number; sell_per?: number; hold_per?: number } };
-  }>(`${MMB_BASE}/get-market-sentiments?scId=${encodeURIComponent(scId)}`, true);
-  const s = json?.data?.sentimeter;
-  return {
-    buy_pct: Number(s?.buy_perc ?? 0),
-    sell_pct: Number(s?.sell_per ?? 0),
-    hold_pct: Number(s?.hold_per ?? 0),
-  };
-}
-
 export async function fetchForumAiSummary(topicId: string, scId: string) {
   const json = await getJson<{
     success: number;

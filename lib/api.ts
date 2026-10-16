@@ -733,6 +733,8 @@ export interface ForumSentiment {
   sc_id: string;
   forum_url: string;
   crowd: { buy_pct: number; sell_pct: number; hold_pct: number };
+  crowd_source: "posts";
+  scored_n: number;
   language_score: number;
   language_bias: "bullish" | "bearish" | "mixed" | "neutral";
   overall: "bullish" | "bearish" | "mixed" | "neutral";
